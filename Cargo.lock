@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "basealloc"
+version = "0.1.0"
+dependencies = [
+ "basealloc-sys",
+ "libc",
+]
+
+[[package]]
 name = "basealloc-sys"
 version = "0.1.0"
 dependencies = [

@@ -46,6 +46,7 @@ The allocator is designed to be standalone without fallback to libc malloc, glob
 - **Critical:** Avoid `String`, `Vec`, or formatting after allocator failure (causes infinite loops)
 
 **Code Quality:**
+- **NEVER ignore Clippy warnings** - address ALL warnings, even trivial ones
 - Follow Clippy rules: max 7 function arguments, max 50 lines per function, no unnecessary Box/Vec usage (configured in clippy.toml)
 - Use rustfmt with project settings: 2-space tabs, 100 char width, vertical imports (rustfmt.toml)
 - Fix bugs in implementation, never work around them by changing tests or examples
