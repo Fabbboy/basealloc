@@ -1,6 +1,7 @@
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 use crate::unix::UNIX_SYSTEM;
 
+#[derive(Debug)]
 pub enum SysError {
   Unsupported,
   OutOfMemory,
@@ -71,3 +72,6 @@ pub static GLOBAL_SYSTEM: &dyn System = &UNIX_SYSTEM;
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub static GLOBAL_SYSTEM: &dyn System = &UnsupportedSystem {};
+
+#[cfg(test)]
+mod tests;
