@@ -71,6 +71,10 @@ impl UnixSystem {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 unsafe impl System for UnixSystem {
   unsafe fn alloc<'mem>(&self, size: usize, options: SysOption) -> SysResult<&'mem mut [u8]> {
+    if size == 0 {
+      return Ok(&mut []);
+    }
+
     if is_page_aligned(size) != Some(true) {
       return Err(SysError::InvalidArgument);
     }
@@ -93,6 +97,10 @@ unsafe impl System for UnixSystem {
   }
 
   unsafe fn modify(&self, slice: &[u8], options: SysOption) -> SysResult<()> {
+    if slice.is_empty() {
+      return Ok(());
+    }
+
     match options {
       SysOption::Reserve | SysOption::ReadWrite => Self::protect(slice, options),
       SysOption::Reclaim => Self::advise(slice, options),
@@ -100,6 +108,10 @@ unsafe impl System for UnixSystem {
   }
 
   unsafe fn dealloc(&self, slice: &[u8]) -> SysResult<()> {
+    if slice.is_empty() {
+      return Ok(());
+    }
+
     let result = unsafe { libc::munmap(Self::as_c(slice), slice.len()) };
     if result == 0 {
       return Ok(());

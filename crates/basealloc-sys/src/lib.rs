@@ -1,5 +1,6 @@
 #![no_std]
 
+pub mod extent;
 pub mod math;
 pub mod prim;
 pub mod system;
@@ -21,6 +22,7 @@ pub mod prelude {
       is_page_aligned,
       min_align,
       page_align,
+      page_size,
       word_width,
     },
     system::{
