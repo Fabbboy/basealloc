@@ -1,3 +1,5 @@
 too-large-for-stack = 1024
 too-many-arguments-threshold = 7
 too-many-lines-threshold = 50
+unnecessary-box-size = 0
+vec-box-size-threshold = 0
