@@ -56,7 +56,7 @@ impl UnixSystem {
   fn advise(slice: &[u8], options: SysOption) -> SysResult<()> {
     let flags = match options {
       SysOption::Reclaim => Self::reclaim_flags(),
-      _ => return Err(SysError::InvalidArgument), // only reclaim uses madvise
+      _ => return Err(SysError::InvalidArgument),
     };
 
     let result = unsafe { libc::madvise(Self::as_c(slice), slice.len(), flags) };
