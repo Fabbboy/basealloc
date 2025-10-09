@@ -40,8 +40,7 @@ impl<'mem> Extent<'mem> {
 
   pub fn partial(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
     self.check(range.clone())?;
-    unsafe { GLOBAL_SYSTEM.modify(&mut self.slice[range], options) }
-      .map_err(ExtentError::SystemError)
+    unsafe { GLOBAL_SYSTEM.modify(&self.slice[range], options) }.map_err(ExtentError::SystemError)
   }
 }
 
@@ -166,7 +165,7 @@ mod tests {
   fn test_extent_check_valid() {
     let ps = page_size();
     let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    assert!(extent.check(0..ps/2).is_ok());
+    assert!(extent.check(0..ps / 2).is_ok());
     assert!(extent.check(0..ps).is_ok());
     assert!(extent.check(100..100).is_ok());
   }
@@ -177,7 +176,10 @@ mod tests {
     let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
     assert!(matches!(extent.check(0..ps + 1), Err(ExtentError::OOB)));
     assert!(matches!(extent.check(100..50), Err(ExtentError::OOB)));
-    assert!(matches!(extent.check(ps + 1..ps + 2), Err(ExtentError::OOB)));
+    assert!(matches!(
+      extent.check(ps + 1..ps + 2),
+      Err(ExtentError::OOB)
+    ));
   }
 
   #[test]
