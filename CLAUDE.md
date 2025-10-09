@@ -1,0 +1,52 @@
+
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## BaseAlloc
+A memory allocator written in Rust. Inspired by Jemalloc and Mimalloc. Tcache for the win
+
+## Development Commands
+
+- **Build:** `cargo build` or `cargo build --release`
+- **Test:** `cargo test` (runs all tests including unit tests in src files)
+- **Test specific crate:** `cargo test -p basealloc-sys`
+- **Check:** `cargo check` (faster than build, just checks compilation)
+- **Clippy:** `cargo clippy` (linting)
+- **Format:** `cargo fmt`
+
+## Architecture
+
+This is a workspace with multiple crates:
+- `basealloc-sys`: Low-level primitives and system abstractions for memory management
+  - `prim.rs`: Core alignment utilities, page size detection, and pointer manipulation functions
+  - Uses `#![no_std]` and only `core` crate allowed (no `std`, no `alloc`)
+  - Platform-specific page size detection for Linux/macOS via libc, fallback for others
+
+The allocator is designed to be standalone without fallback to libc malloc, global alloc, or system alloc.
+
+## Coding Rules
+
+**Naming and API Design:**
+- Use descriptive lifetime and generic names, never meaningless ones like `'a`
+- Minimize `pub` visibility - only expose what's necessary
+- Keep function names concise - avoid chaining full sentences (e.g. avoid `get_user_name_from_id` or `allocate_segment_from_active_arena`)
+- Don't describe obvious context in names (e.g. no need for `from_active_arena` since we wouldn't allocate from inactive ones)
+
+**Safety and Error Handling:**
+- Methods using `unsafe` that aren't fully guaranteed safe **MUST** be marked `unsafe`
+- Avoid `panic!` except for truly unrecoverable errors - bubble up errors instead
+- For raw pointers, prefer `NonNull<T>` over `*mut T` or `*const T` when possible
+- Generally prefer references over raw pointers (though raw pointers may be necessary for allocator implementation)
+
+**Performance and Constraints:**
+- Mark methods as `const` when possible (constructors, getters, etc.)
+- Use `#![no_std]` - only `core` crate allowed, no `std` or `alloc`
+- This is **THE** allocator - no fallback to libc malloc, global alloc, or system alloc
+- **Critical:** Avoid `String`, `Vec`, or formatting after allocator failure (causes infinite loops)
+
+**Code Quality:**
+- Follow Clippy rules: max 7 function arguments, max 50 lines per function (configured in clippy.toml)
+- Use rustfmt with project settings: 2-space tabs, 100 char width, vertical imports (rustfmt.toml)
+- Fix bugs in implementation, never work around them by changing tests or examples
+- Use Rust ergonomics: Option/Result combinators, iterators, closures, pattern matching, From/TryFrom, Into/TryInto, Deref/DerefMut, Index/IndexMut
