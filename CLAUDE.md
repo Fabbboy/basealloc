@@ -22,8 +22,29 @@ This is a workspace with multiple crates:
   - `prim.rs`: Core alignment utilities, page size detection, and pointer manipulation functions
   - Uses `#![no_std]` and only `core` crate allowed (no `std`, no `alloc`)
   - Platform-specific page size detection for Linux/macOS via libc, fallback for others
+- `basealloc-list`: Intrusive doubly-linked list implementation
+  - `HasLink` trait for types that can be linked
+  - `Link<T>` struct containing next/prev pointers  
+  - `List` utility with insert_before/insert_after/remove operations
+  - `ListIter` and `ListDrainer` for iteration (use `ListIter::from(&node)`)
+  - Uses `#![cfg_attr(not(test), no_std)]` to allow std in tests for Vec/Debug
 
 The allocator is designed to be standalone without fallback to libc malloc, global alloc, or system alloc.
+
+## Data Structures
+
+**Intrusive Linked Lists (`basealloc-list`):**
+- Nodes contain their own link storage via `HasLink` trait
+- `List::insert_before(item, at)` - insert item before at
+- `List::insert_after(item, at)` - insert item after at  
+- `List::remove(item)` - remove item from list
+- `ListIter::from(&start_node)` - iterate without removing
+- `ListDrainer::from(&start_node)` - iterate and remove each node
+
+**Tree Maps and Dictionaries:**
+- Not yet implemented - will be added for size-class mapping and arena management
+- Should follow same intrusive pattern for memory efficiency
+- Consider red-black trees or B-trees for ordered mappings
 
 ## Coding Rules
 
