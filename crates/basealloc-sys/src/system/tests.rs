@@ -3,12 +3,12 @@ use crate::prim::page_size;
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn test_posix_memory_alloc_dealloc() {
+fn test_supported_memory_alloc_dealloc() {
   let size = page_size();
   
   unsafe {
     let memory = GLOBAL_SYSTEM.alloc(size, SysOption::ReadWrite);
-    assert!(memory.is_ok(), "Should allocate memory on POSIX systems");
+    assert!(memory.is_ok(), "Should allocate memory on supported systems");
     
     let slice = memory.unwrap();
     assert_eq!(slice.len(), size, "Allocated size should match requested size");
@@ -25,12 +25,12 @@ fn test_posix_memory_alloc_dealloc() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn test_posix_memory_reserve_modify() {
+fn test_supported_memory_reserve_modify() {
   let size = page_size();
   
   unsafe {
     let memory = GLOBAL_SYSTEM.alloc(size, SysOption::Reserve);
-    assert!(memory.is_ok(), "Should reserve memory on POSIX systems");
+    assert!(memory.is_ok(), "Should reserve memory on supported systems");
     
     let slice = memory.unwrap();
     
@@ -47,7 +47,7 @@ fn test_posix_memory_reserve_modify() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn test_posix_memory_reclaim() {
+fn test_supported_memory_reclaim() {
   let size = page_size() * 2;
   
   unsafe {
@@ -67,7 +67,7 @@ fn test_posix_memory_reclaim() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-fn test_posix_invalid_size_alignment() {
+fn test_supported_invalid_size_alignment() {
   unsafe {
     let result = GLOBAL_SYSTEM.alloc(123, SysOption::ReadWrite);
     assert!(result.is_err(), "Should fail with non-page-aligned size");
