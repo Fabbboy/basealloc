@@ -1,4 +1,7 @@
-use core::ptr::NonNull;
+use core::{
+  mem::ManuallyDrop,
+  ptr::NonNull,
+};
 
 use basealloc_list::{
   HasLink,
@@ -31,7 +34,7 @@ pub type ChunkResult<T> = Result<T, ChunkError>;
 pub struct Chunk {
   link: Link<Self>,
   used: usize,
-  extent: Extent,
+  extent: ManuallyDrop<Extent>,
 }
 
 impl Chunk {
@@ -55,7 +58,7 @@ impl Chunk {
     let ptr = extent.as_mut().as_mut_ptr() as *mut Self;
     unsafe {
       ptr.write(Self {
-        extent,
+        extent: ManuallyDrop::new(extent),
         used,
         link: Link::default(),
       });
@@ -84,6 +87,14 @@ impl Chunk {
     let slice = &mut self.as_mut()[start..end];
 
     Ok(slice)
+  }
+}
+
+impl Drop for Chunk {
+  fn drop(&mut self) {
+    unsafe {
+      ManuallyDrop::drop(&mut self.extent);
+    }
   }
 }
 
