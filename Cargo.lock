@@ -27,13 +27,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "basealloc-rbtree"
-version = "0.1.0"
-dependencies = [
- "getset",
-]
-
-[[package]]
 name = "basealloc-sys"
 version = "0.1.0"
 dependencies = [

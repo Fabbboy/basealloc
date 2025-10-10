@@ -22,7 +22,7 @@ strip = "symbols"
 [workspace]
 members = [
   "crates/basealloc-alloc",
-  "crates/basealloc-list", "crates/basealloc-rbtree",
+  "crates/basealloc-list",
   "crates/basealloc-sys",
   "ffi",
 ]
@@ -35,5 +35,4 @@ getset = "0.1.6"
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }
 basealloc-alloc = { path = "crates/basealloc-alloc" }
-basealloc-rbtree = { path = "crates/basealloc-rbtree" }
 basealloc = { path = "." }
