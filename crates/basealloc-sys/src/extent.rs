@@ -1,4 +1,8 @@
-use core::ops::Range;
+use core::ops::{
+  Index,
+  IndexMut,
+  Range,
+};
 
 use crate::{
   GLOBAL_SYSTEM,
@@ -34,11 +38,7 @@ impl<'mem> Extent<'mem> {
     Ok(())
   }
 
-  pub fn modify(&mut self, options: SysOption) -> ExtentResult<()> {
-    unsafe { GLOBAL_SYSTEM.modify(self.slice, options) }.map_err(ExtentError::SystemError)
-  }
-
-  pub fn partial(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
+  pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
     self.check(range.clone())?;
     unsafe { GLOBAL_SYSTEM.modify(&self.slice[range], options) }.map_err(ExtentError::SystemError)
   }
@@ -106,18 +106,10 @@ mod tests {
   }
 
   #[test]
-  fn test_extent_modify() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.modify(SysOption::Reserve);
-    assert!(result.is_ok());
-  }
-
-  #[test]
   fn test_extent_partial_valid_range() {
     let ps = page_size();
     let mut extent = Extent::new(ps * 2, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(0..ps, SysOption::Reserve);
+    let result = extent.modify(0..ps, SysOption::Reserve);
     assert!(result.is_ok());
   }
 
@@ -125,7 +117,7 @@ mod tests {
   fn test_extent_partial_full_range() {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(0..ps, SysOption::Reserve);
+    let result = extent.modify(0..ps, SysOption::Reserve);
     assert!(result.is_ok());
   }
 
@@ -133,7 +125,7 @@ mod tests {
   fn test_extent_partial_empty_range() {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(100..100, SysOption::Reserve);
+    let result = extent.modify(100..100, SysOption::Reserve);
     assert!(result.is_ok());
   }
 
@@ -141,7 +133,7 @@ mod tests {
   fn test_extent_partial_oob_end() {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(0..ps + 1, SysOption::Reserve);
+    let result = extent.modify(0..ps + 1, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
 
@@ -149,7 +141,7 @@ mod tests {
   fn test_extent_partial_oob_start() {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(ps + 1..ps + 2, SysOption::Reserve);
+    let result = extent.modify(ps + 1..ps + 2, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
 
@@ -157,7 +149,7 @@ mod tests {
   fn test_extent_partial_invalid_range() {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
-    let result = extent.partial(100..50, SysOption::Reserve);
+    let result = extent.modify(100..50, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
 
