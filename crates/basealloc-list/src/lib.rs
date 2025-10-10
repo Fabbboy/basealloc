@@ -192,6 +192,15 @@ where
   }
 }
 
+impl<T> Drop for Link<T>
+where
+  T: HasLink + ?Sized,
+{
+  fn drop(&mut self) {
+    self.next = None;
+    self.prev = None;
+  }
+}
 
 #[cfg(test)]
 mod tests;
