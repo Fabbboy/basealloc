@@ -22,7 +22,7 @@ pub trait HasLink {
 #[derive(Debug, Getters, MutGetters)]
 pub struct Link<T>
 where
-  T: HasLink + ?Sized,
+  T: HasLink,
 {
   #[getset(get = "pub", get_mut = "pub")]
   next: Option<NonNull<T>>,
@@ -194,7 +194,7 @@ where
 
 impl<T> Drop for Link<T>
 where
-  T: HasLink + ?Sized,
+  T: HasLink,
 {
   fn drop(&mut self) {
     self.next = None;
