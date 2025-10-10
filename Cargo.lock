@@ -12,6 +12,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "basealloc-alloc"
+version = "0.1.0"
+dependencies = [
+ "basealloc-list",
+ "basealloc-sys",
+]
+
+[[package]]
 name = "basealloc-list"
 version = "0.1.0"
 dependencies = [

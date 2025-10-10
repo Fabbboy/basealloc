@@ -2,7 +2,10 @@
 
 use core::{
   marker::PhantomData,
-  ptr::NonNull,
+  ptr::{
+    NonNull,
+    drop_in_place,
+  },
 };
 
 use getset::{
@@ -28,6 +31,18 @@ where
   next: Option<NonNull<T>>,
   #[getset(get = "pub", get_mut = "pub")]
   prev: Option<NonNull<T>>,
+}
+
+impl<T> Default for Link<T>
+where
+  T: HasLink,
+{
+  fn default() -> Self {
+    Self {
+      next: None,
+      prev: None,
+    }
+  }
 }
 
 pub struct List {}
@@ -96,6 +111,13 @@ impl List {
 
     item_link.next = None;
     item_link.prev = None;
+  }
+
+  pub fn drain<'list, T>(start: &'list mut T) -> ListDrainer<'list, T>
+  where
+    T: HasLink + 'list,
+  {
+    ListDrainer::from(start)
   }
 }
 
@@ -174,6 +196,15 @@ where
   }
 }
 
+impl<'list, T> From<&'list mut T> for ListDrainer<'list, T>
+where
+  T: HasLink + 'list,
+{
+  fn from(start: &'list mut T) -> Self {
+    Self::new(Some(NonNull::from(start)))
+  }
+}
+
 impl<'list, T> Iterator for ListDrainer<'list, T>
 where
   T: HasLink + 'list,
@@ -188,6 +219,20 @@ where
       Some(current_ref)
     } else {
       None
+    }
+  }
+}
+
+impl<'list, T> Drop for ListDrainer<'list, T>
+where
+  T: HasLink + 'list,
+{
+  fn drop(&mut self) {
+    while let Some(ptr) = self.next {
+      unsafe {
+        self.next = ptr.as_ref().link().next;
+        drop_in_place(ptr.as_ptr());
+      }
     }
   }
 }

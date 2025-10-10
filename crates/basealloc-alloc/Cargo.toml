@@ -1,0 +1,8 @@
+[package]
+name = "basealloc-alloc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+basealloc-sys = { workspace = true }
+basealloc-list = { workspace = true }

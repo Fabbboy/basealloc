@@ -18,7 +18,7 @@ pub static UNIX_SYSTEM: UnixSystem = UnixSystem {};
 impl UnixSystem {
   const fn prot_as(options: SysOption) -> i32 {
     match options {
-      SysOption::ReadWrite => libc::PROT_READ | libc::PROT_WRITE,
+      SysOption::Commit => libc::PROT_READ | libc::PROT_WRITE,
       _ => libc::PROT_NONE,
     }
   }
@@ -39,10 +39,20 @@ impl UnixSystem {
     slice.as_ptr() as *mut libc::c_void
   }
 
+  fn validate_range(slice: &[u8]) -> Result<(), SysError> {
+    let addr = slice.as_ptr() as usize;
+    if is_page_aligned(addr) != Ok(true) || is_page_aligned(slice.len()) != Ok(true) {
+      return Err(SysError::InvalidArgument);
+    }
+    Ok(())
+  }
+
   fn protect(slice: &[u8], options: SysOption) -> Result<(), SysError> {
+    Self::validate_range(slice)?;
+    
     let prot = match options {
       SysOption::Reserve => Self::reserve_prot(),
-      SysOption::ReadWrite => Self::prot_as(options),
+      SysOption::Commit => Self::prot_as(options),
       SysOption::Reclaim => return Err(SysError::InvalidArgument),
     };
     let result = unsafe { libc::mprotect(Self::as_c(slice), slice.len(), prot) };
@@ -54,6 +64,8 @@ impl UnixSystem {
   }
 
   fn advise(slice: &[u8], options: SysOption) -> SysResult<()> {
+    Self::validate_range(slice)?;
+    
     let flags = match options {
       SysOption::Reclaim => Self::reclaim_flags(),
       _ => return Err(SysError::InvalidArgument),
@@ -75,13 +87,13 @@ unsafe impl System for UnixSystem {
       return Ok(&mut []);
     }
 
-    if is_page_aligned(size) != Some(true) {
+    if is_page_aligned(size) != Ok(true) {
       return Err(SysError::InvalidArgument);
     }
 
     let prot = match options {
       SysOption::Reserve => Self::reserve_prot(),
-      SysOption::ReadWrite => Self::prot_as(options),
+      SysOption::Commit => Self::prot_as(options),
       SysOption::Reclaim => return Err(SysError::InvalidArgument),
     };
 
@@ -102,7 +114,7 @@ unsafe impl System for UnixSystem {
     }
 
     match options {
-      SysOption::Reserve | SysOption::ReadWrite => Self::protect(slice, options),
+      SysOption::Reserve | SysOption::Commit => Self::protect(slice, options),
       SysOption::Reclaim => Self::advise(slice, options),
     }
   }

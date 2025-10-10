@@ -20,7 +20,12 @@ lto = true
 strip = "symbols"
 
 [workspace]
-members = ["crates/basealloc-list", "crates/basealloc-sys", "ffi"]
+members = [
+  "crates/basealloc-alloc",
+  "crates/basealloc-list",
+  "crates/basealloc-sys",
+  "ffi",
+]
 resolver = "3"
 
 [workspace.dependencies]
@@ -29,4 +34,5 @@ getset = "0.1.6"
 
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }
+basealloc-alloc = { path = "crates/basealloc-alloc" }
 basealloc = { path = "." }

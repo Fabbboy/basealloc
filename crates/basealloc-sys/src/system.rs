@@ -9,7 +9,7 @@ pub enum SysError {
 }
 
 pub enum SysOption {
-  ReadWrite,
+  Commit,
   Reserve,
   Reclaim,
 }

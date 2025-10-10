@@ -16,12 +16,12 @@ pub enum ExtentError {
 
 pub type ExtentResult<T> = Result<T, ExtentError>;
 
-pub struct Extent<'mem> {
-  slice: &'mem mut [u8],
+pub struct Extent {
+  slice: &'static mut [u8],
 }
 
-impl<'mem> Extent<'mem> {
-  pub fn new(size: usize, options: SysOption) -> ExtentResult<Extent<'mem>> {
+impl Extent {
+  pub fn new(size: usize, options: SysOption) -> ExtentResult<Extent> {
     let slice = unsafe { GLOBAL_SYSTEM.alloc(size, options) }.map_err(ExtentError::SystemError)?;
 
     Ok(Extent { slice })
@@ -34,35 +34,25 @@ impl<'mem> Extent<'mem> {
     Ok(())
   }
 
-  pub fn split_at(&self, mid: usize) -> ExtentResult<(&[u8], &[u8])> {
-    self.check(0..mid)?;
-    Ok(self.slice.split_at(mid))
-  }
-
-  pub fn split_at_mut(&mut self, mid: usize) -> ExtentResult<(&mut [u8], &mut [u8])> {
-    self.check(0..mid)?;
-    Ok(self.slice.split_at_mut(mid))
-  }
-
   pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
     self.check(range.clone())?;
     unsafe { GLOBAL_SYSTEM.modify(&self.slice[range], options) }.map_err(ExtentError::SystemError)
   }
 }
 
-impl<'mem> AsRef<[u8]> for Extent<'mem> {
+impl AsRef<[u8]> for Extent {
   fn as_ref(&self) -> &[u8] {
     self.slice
   }
 }
 
-impl<'mem> AsMut<[u8]> for Extent<'mem> {
+impl AsMut<[u8]> for Extent {
   fn as_mut(&mut self) -> &mut [u8] {
     self.slice
   }
 }
 
-impl<'mem> Drop for Extent<'mem> {
+impl Drop for Extent {
   fn drop(&mut self) {
     let _ = unsafe { GLOBAL_SYSTEM.dealloc(self.slice) };
   }
@@ -79,7 +69,7 @@ mod tests {
   #[test]
   fn test_extent_new() {
     let ps = page_size();
-    let extent = Extent::new(ps, SysOption::ReadWrite);
+    let extent = Extent::new(ps, SysOption::Commit);
     assert!(extent.is_ok());
     let extent = extent.unwrap();
     assert_eq!(extent.as_ref().len(), ps);
@@ -87,7 +77,7 @@ mod tests {
 
   #[test]
   fn test_extent_zero_size() {
-    let extent = Extent::new(0, SysOption::ReadWrite);
+    let extent = Extent::new(0, SysOption::Commit);
     assert!(extent.is_ok());
     let extent = extent.unwrap();
     assert_eq!(extent.as_ref().len(), 0);
@@ -96,7 +86,7 @@ mod tests {
   #[test]
   fn test_extent_as_ref() {
     let ps = page_size();
-    let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let extent = Extent::new(ps, SysOption::Commit).unwrap();
     let slice = extent.as_ref();
     assert_eq!(slice.len(), ps);
   }
@@ -104,7 +94,7 @@ mod tests {
   #[test]
   fn test_extent_as_mut() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let slice = extent.as_mut();
     assert_eq!(slice.len(), ps);
     slice[0] = 42;
@@ -114,7 +104,7 @@ mod tests {
   #[test]
   fn test_extent_partial_valid_range() {
     let ps = page_size();
-    let mut extent = Extent::new(ps * 2, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps * 2, SysOption::Commit).unwrap();
     let result = extent.modify(0..ps, SysOption::Reserve);
     assert!(result.is_ok());
   }
@@ -122,7 +112,7 @@ mod tests {
   #[test]
   fn test_extent_partial_full_range() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(0..ps, SysOption::Reserve);
     assert!(result.is_ok());
   }
@@ -130,7 +120,7 @@ mod tests {
   #[test]
   fn test_extent_partial_empty_range() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(100..100, SysOption::Reserve);
     assert!(result.is_ok());
   }
@@ -138,7 +128,7 @@ mod tests {
   #[test]
   fn test_extent_partial_oob_end() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(0..ps + 1, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
@@ -146,7 +136,7 @@ mod tests {
   #[test]
   fn test_extent_partial_oob_start() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(ps + 1..ps + 2, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
@@ -154,7 +144,7 @@ mod tests {
   #[test]
   fn test_extent_partial_invalid_range() {
     let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(100..50, SysOption::Reserve);
     assert!(matches!(result, Err(ExtentError::OOB)));
   }
@@ -162,7 +152,7 @@ mod tests {
   #[test]
   fn test_extent_check_valid() {
     let ps = page_size();
-    let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let extent = Extent::new(ps, SysOption::Commit).unwrap();
     assert!(extent.check(0..ps / 2).is_ok());
     assert!(extent.check(0..ps).is_ok());
     assert!(extent.check(100..100).is_ok());
@@ -171,7 +161,7 @@ mod tests {
   #[test]
   fn test_extent_check_invalid() {
     let ps = page_size();
-    let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let extent = Extent::new(ps, SysOption::Commit).unwrap();
     assert!(matches!(extent.check(0..ps + 1), Err(ExtentError::OOB)));
     assert!(matches!(extent.check(100..50), Err(ExtentError::OOB)));
     assert!(matches!(
@@ -183,31 +173,7 @@ mod tests {
   #[test]
   fn test_extent_drop() {
     let ps = page_size();
-    let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
+    let extent = Extent::new(ps, SysOption::Commit).unwrap();
     drop(extent);
-  }
-
-  #[test]
-  fn test_extent_split_at() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps * 2, SysOption::ReadWrite).unwrap();
-    {
-      let (first, second) = extent.split_at(ps).unwrap();
-      assert_eq!(first.len(), ps);
-      assert_eq!(second.len(), ps);
-    }
-
-    {
-      let (first_mut, second_mut) = extent.split_at_mut(ps).unwrap();
-      assert_eq!(first_mut.len(), ps);
-      assert_eq!(second_mut.len(), ps);
-
-      first_mut[0] = 1;
-      second_mut[0] = 2;
-    }
-    
-    let slice = extent.as_ref();
-    assert_eq!(slice[0], 1);
-    assert_eq!(slice[ps], 2);
   }
 }

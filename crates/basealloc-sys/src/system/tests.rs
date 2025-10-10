@@ -7,7 +7,7 @@ fn test_supported_memory_alloc_dealloc() {
   let size = page_size();
 
   unsafe {
-    let memory = GLOBAL_SYSTEM.alloc(size, SysOption::ReadWrite);
+    let memory = GLOBAL_SYSTEM.alloc(size, SysOption::Commit);
     assert!(
       memory.is_ok(),
       "Should allocate memory on supported systems"
@@ -45,7 +45,7 @@ fn test_supported_memory_reserve_modify() {
 
     let slice = memory.unwrap();
 
-    let result = GLOBAL_SYSTEM.modify(slice, SysOption::ReadWrite);
+    let result = GLOBAL_SYSTEM.modify(slice, SysOption::Commit);
     assert!(result.is_ok(), "Should modify memory protection");
 
     slice[0] = 42;
@@ -65,7 +65,7 @@ fn test_supported_memory_reclaim() {
   let size = page_size() * 2;
 
   unsafe {
-    let memory = GLOBAL_SYSTEM.alloc(size, SysOption::ReadWrite);
+    let memory = GLOBAL_SYSTEM.alloc(size, SysOption::Commit);
     assert!(memory.is_ok(), "Should allocate memory");
 
     let slice = memory.unwrap();
@@ -83,7 +83,7 @@ fn test_supported_memory_reclaim() {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn test_supported_invalid_size_alignment() {
   unsafe {
-    let result = GLOBAL_SYSTEM.alloc(123, SysOption::ReadWrite);
+    let result = GLOBAL_SYSTEM.alloc(123, SysOption::Commit);
     assert!(result.is_err(), "Should fail with non-page-aligned size");
 
     if let Err(error) = result {
@@ -101,7 +101,7 @@ fn test_unsupported_system_alloc() {
   let size = 4096;
 
   unsafe {
-    let result = GLOBAL_SYSTEM.alloc(size, SysOption::ReadWrite);
+    let result = GLOBAL_SYSTEM.alloc(size, SysOption::Commit);
     assert!(result.is_err(), "Should fail on unsupported systems");
 
     if let Err(error) = result {
@@ -119,7 +119,7 @@ fn test_unsupported_system_modify() {
   let dummy_slice = &[0u8; 4096];
 
   unsafe {
-    let result = GLOBAL_SYSTEM.modify(dummy_slice, SysOption::ReadWrite);
+    let result = GLOBAL_SYSTEM.modify(dummy_slice, SysOption::Commit);
     assert!(result.is_err(), "Should fail on unsupported systems");
 
     if let Err(error) = result {

@@ -8,6 +8,14 @@ use core::sync::atomic::{
   Ordering,
 };
 
+#[derive(Debug, PartialEq)]
+pub enum PrimError {
+  InvalidAlignment,
+  Overflow,
+}
+
+pub type PrimResult<T> = Result<T, PrimError>;
+
 #[cfg(any(
     not(any(target_os = "linux", target_os = "macos")),
     target_os = "windows" // temporary
@@ -51,12 +59,12 @@ pub fn page_size() -> usize {
   }
 }
 
-pub fn page_align(value: usize) -> Option<usize> {
-  align_up(value, page_size())
+pub fn page_align(value: usize) -> PrimResult<usize> {
+  align_up(value, page_size()).ok_or(PrimError::Overflow)
 }
 
-pub fn is_page_aligned(value: usize) -> Option<bool> {
-  is_aligned(value, page_size())
+pub fn is_page_aligned(value: usize) -> PrimResult<bool> {
+  is_aligned(value, page_size()).ok_or(PrimError::InvalidAlignment)
 }
 
 #[cfg(test)]
@@ -83,24 +91,24 @@ mod tests {
   #[test]
   fn test_page_align() {
     let ps = page_size();
-    assert_eq!(page_align(0), Some(0));
-    assert_eq!(page_align(1), Some(ps));
-    assert_eq!(page_align(ps), Some(ps));
-    assert_eq!(page_align(ps + 1), Some(ps * 2));
-    assert_eq!(page_align(ps - 1), Some(ps));
+    assert_eq!(page_align(0), Ok(0));
+    assert_eq!(page_align(1), Ok(ps));
+    assert_eq!(page_align(ps), Ok(ps));
+    assert_eq!(page_align(ps + 1), Ok(ps * 2));
+    assert_eq!(page_align(ps - 1), Ok(ps));
 
-    assert_eq!(page_align(usize::MAX), None);
-    assert_eq!(page_align(usize::MAX - ps + 2), None);
+    assert!(matches!(page_align(usize::MAX), Err(PrimError::Overflow)));
+    assert!(matches!(page_align(usize::MAX - ps + 2), Err(PrimError::Overflow)));
   }
 
   #[test]
   fn test_is_page_aligned() {
     let ps = page_size();
-    assert_eq!(is_page_aligned(0), Some(true));
-    assert_eq!(is_page_aligned(1), Some(false));
-    assert_eq!(is_page_aligned(ps), Some(true));
-    assert_eq!(is_page_aligned(ps + 1), Some(false));
-    assert_eq!(is_page_aligned(ps - 1), Some(false));
-    assert_eq!(is_page_aligned(ps * 2), Some(true));
+    assert_eq!(is_page_aligned(0), Ok(true));
+    assert_eq!(is_page_aligned(1), Ok(false));
+    assert_eq!(is_page_aligned(ps), Ok(true));
+    assert_eq!(is_page_aligned(ps + 1), Ok(false));
+    assert_eq!(is_page_aligned(ps - 1), Ok(false));
+    assert_eq!(is_page_aligned(ps * 2), Ok(true));
   }
 }
