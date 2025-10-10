@@ -249,3 +249,13 @@ where
 
 #[cfg(test)]
 mod tests;
+
+pub mod prelude {
+  pub use super::{
+    HasLink,
+    Link,
+    List,
+    ListDrainer,
+    ListIter,
+  };
+}

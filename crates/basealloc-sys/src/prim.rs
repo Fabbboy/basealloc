@@ -98,7 +98,10 @@ mod tests {
     assert_eq!(page_align(ps - 1), Ok(ps));
 
     assert!(matches!(page_align(usize::MAX), Err(PrimError::Overflow)));
-    assert!(matches!(page_align(usize::MAX - ps + 2), Err(PrimError::Overflow)));
+    assert!(matches!(
+      page_align(usize::MAX - ps + 2),
+      Err(PrimError::Overflow)
+    ));
   }
 
   #[test]

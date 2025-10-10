@@ -8,10 +8,17 @@ use getset::{
 mod config {}
 
 pub trait HasRb {
+  type Key: Ord;
+
   fn rb(&self) -> &RbLink<Self>
   where
     Self: Sized;
+
   fn rb_mut(&mut self) -> &mut RbLink<Self>
+  where
+    Self: Sized;
+
+  fn key(&self) -> &Self::Key
   where
     Self: Sized;
 }

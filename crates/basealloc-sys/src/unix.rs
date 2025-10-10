@@ -49,7 +49,7 @@ impl UnixSystem {
 
   fn protect(slice: &[u8], options: SysOption) -> Result<(), SysError> {
     Self::validate_range(slice)?;
-    
+
     let prot = match options {
       SysOption::Reserve => Self::reserve_prot(),
       SysOption::Commit => Self::prot_as(options),
@@ -65,7 +65,7 @@ impl UnixSystem {
 
   fn advise(slice: &[u8], options: SysOption) -> SysResult<()> {
     Self::validate_range(slice)?;
-    
+
     let flags = match options {
       SysOption::Reclaim => Self::reclaim_flags(),
       _ => return Err(SysError::InvalidArgument),
