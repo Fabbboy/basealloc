@@ -7,7 +7,14 @@ use getset::{
 
 mod config {}
 
-pub trait HasRb {}
+pub trait HasRb {
+  fn rb(&self) -> &RbLink<Self>
+  where
+    Self: Sized;
+  fn rb_mut(&mut self) -> &mut RbLink<Self>
+  where
+    Self: Sized;
+}
 
 #[derive(Debug)]
 pub enum RbError {}
@@ -48,6 +55,7 @@ where
   }
 }
 
+#[derive(Debug, Default)]
 pub struct RbTree<T>
 where
   T: HasRb,
