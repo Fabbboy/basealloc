@@ -33,7 +33,7 @@ where
 pub struct List {}
 
 impl List {
-  fn to_nn<T>(item: &mut T) -> NonNull<T>
+  fn to_non_null<T>(item: &mut T) -> NonNull<T>
   where
     T: HasLink,
   {
@@ -44,8 +44,8 @@ impl List {
   where
     T: HasLink,
   {
-    let at_ptr = Self::to_nn(at);
-    let item_ptr = Self::to_nn(item);
+    let at_ptr = Self::to_non_null(at);
+    let item_ptr = Self::to_non_null(item);
 
     let item_link = item.link_mut();
     let at_link = at.link_mut();
@@ -64,8 +64,8 @@ impl List {
   where
     T: HasLink,
   {
-    let at_ptr = Self::to_nn(at);
-    let item_ptr = Self::to_nn(item);
+    let at_ptr = Self::to_non_null(at);
+    let item_ptr = Self::to_non_null(item);
 
     let item_link = item.link_mut();
     let at_link = at.link_mut();
