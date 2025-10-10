@@ -1,8 +1,4 @@
-use core::ops::{
-  Index,
-  IndexMut,
-  Range,
-};
+use core::ops::Range;
 
 use crate::{
   GLOBAL_SYSTEM,
@@ -36,6 +32,16 @@ impl<'mem> Extent<'mem> {
       return Err(ExtentError::OOB);
     }
     Ok(())
+  }
+
+  pub fn split_at(&self, mid: usize) -> ExtentResult<(&[u8], &[u8])> {
+    self.check(0..mid)?;
+    Ok(self.slice.split_at(mid))
+  }
+
+  pub fn split_at_mut(&mut self, mid: usize) -> ExtentResult<(&mut [u8], &mut [u8])> {
+    self.check(0..mid)?;
+    Ok(self.slice.split_at_mut(mid))
   }
 
   pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
@@ -179,5 +185,29 @@ mod tests {
     let ps = page_size();
     let extent = Extent::new(ps, SysOption::ReadWrite).unwrap();
     drop(extent);
+  }
+
+  #[test]
+  fn test_extent_split_at() {
+    let ps = page_size();
+    let mut extent = Extent::new(ps * 2, SysOption::ReadWrite).unwrap();
+    {
+      let (first, second) = extent.split_at(ps).unwrap();
+      assert_eq!(first.len(), ps);
+      assert_eq!(second.len(), ps);
+    }
+
+    {
+      let (first_mut, second_mut) = extent.split_at_mut(ps).unwrap();
+      assert_eq!(first_mut.len(), ps);
+      assert_eq!(second_mut.len(), ps);
+
+      first_mut[0] = 1;
+      second_mut[0] = 2;
+    }
+    
+    let slice = extent.as_ref();
+    assert_eq!(slice[0], 1);
+    assert_eq!(slice[ps], 2);
   }
 }
