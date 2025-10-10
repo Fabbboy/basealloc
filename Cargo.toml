@@ -31,6 +31,8 @@ resolver = "3"
 [workspace.dependencies]
 libc = "0.2.176"
 getset = "0.1.6"
+spin = "0.10.0"
+heapless = "0.9.1"
 
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }

@@ -20,6 +20,11 @@ use basealloc_sys::{
   },
   system::SysOption,
 };
+use spin::Mutex;
+
+use crate::config::CHUNK_SIZE;
+
+pub static GLOBAL_BUMP: Mutex<Bump> = Mutex::new(Bump::new(CHUNK_SIZE));
 
 #[derive(Debug)]
 pub enum ChunkError {
@@ -42,16 +47,12 @@ impl Chunk {
   const SELF_ALIGNED: usize = core::mem::align_of::<Self>();
 
   pub fn new(size: usize) -> ChunkResult<NonNull<Self>> {
-    let mut extent = Extent::new(size, SysOption::Reserve).map_err(ChunkError::ExtentError)?;
+    let mut extent = Extent::new(size, SysOption::Commit).map_err(ChunkError::ExtentError)?;
     let needed = align_up(Self::SELF_SIZED, Self::SELF_ALIGNED).ok_or(ChunkError::Overflow)?;
     let ps_aligned = page_align(needed).map_err(ChunkError::PrimError)?;
     if ps_aligned > size {
       return Err(ChunkError::OutOfMemory);
     }
-
-    extent
-      .modify(0..ps_aligned, SysOption::Commit)
-      .map_err(ChunkError::ExtentError)?;
 
     let used = ps_aligned;
 
@@ -108,6 +109,9 @@ impl HasLink for Chunk {
   }
 }
 
+pub type BumpError = ChunkError;
+pub type BumpResult<T> = Result<T, BumpError>;
+
 pub struct Bump {
   head: Option<NonNull<Chunk>>,
   tail: Option<NonNull<Chunk>>,
@@ -115,7 +119,7 @@ pub struct Bump {
 }
 
 impl Bump {
-  pub fn new(chunk_size: usize) -> Self {
+  pub const fn new(chunk_size: usize) -> Self {
     Self {
       head: None,
       tail: None,
@@ -123,7 +127,7 @@ impl Bump {
     }
   }
 
-  pub fn allocate(&mut self, size: usize, align: usize) -> ChunkResult<&mut [u8]> {
+  pub fn allocate(&mut self, size: usize, align: usize) -> BumpResult<&mut [u8]> {
     if let Some(mut tail) = self.tail {
       unsafe {
         if let Ok(slice) = tail.as_mut().allocate(size, align) {
@@ -157,6 +161,12 @@ impl Drop for Bump {
     }
   }
 }
+
+// SAFETY: Bump contains raw pointers, but they are only accessed through the mutex,
+// ensuring thread safety. The chunks are heap-allocated and their ownership is
+// managed by the Bump allocator itself.
+unsafe impl Send for Bump {}
+unsafe impl Sync for Bump {}
 
 #[cfg(test)]
 mod tests {
