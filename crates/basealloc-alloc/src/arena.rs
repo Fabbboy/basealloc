@@ -1,4 +1,7 @@
-use core::sync::atomic::AtomicPtr;
+use core::{
+  ptr::NonNull,
+  sync::atomic::AtomicPtr,
+};
 
 use heapless::Vec;
 use spin::Mutex;
@@ -28,7 +31,7 @@ impl Arena {
   const SELF_SIZED: usize = core::mem::size_of::<Self>();
   const SELF_ALIGNED: usize = core::mem::align_of::<Self>();
 
-  pub unsafe fn new(chunk_size: usize) -> Result<Self, ArenaError> {
+  pub unsafe fn new(chunk_size: usize) -> Result<NonNull<Self>, ArenaError> {
     let mut gbb = GLOBAL_BUMP.lock();
     let this = gbb
       .allocate(Self::SELF_SIZED, Self::SELF_ALIGNED)
@@ -41,20 +44,25 @@ impl Arena {
       _bump: bump,
       _lock: Mutex::new(()),
     };
-    unsafe {
-      ptr.write(tmp);
-    }
-    Ok(unsafe { ptr.read() })
+
+    unsafe { ptr.write(tmp) };
+    Ok(unsafe { NonNull::new_unchecked(ptr) })
   }
 }
 
 #[cfg(test)]
 mod tests {
+  use core::ptr::drop_in_place;
+
   use super::*;
-  use crate::config::CHUNK_SIZE;
+  use crate::{
+    arena,
+    config::CHUNK_SIZE,
+  };
 
   #[test]
   fn test_arena_creation() {
-    let _ = unsafe { Arena::new(CHUNK_SIZE).expect("Failed to create arena") };
+    let arena = unsafe { Arena::new(CHUNK_SIZE).expect("Failed to create arena") };
+    unsafe { drop_in_place(arena.as_ptr()) };
   }
 }
