@@ -55,10 +55,7 @@ mod tests {
   use core::ptr::drop_in_place;
 
   use super::*;
-  use crate::{
-    arena,
-    config::CHUNK_SIZE,
-  };
+  use crate::config::CHUNK_SIZE;
 
   #[test]
   fn test_arena_creation() {
