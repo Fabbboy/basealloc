@@ -22,6 +22,7 @@ strip = "symbols"
 [workspace]
 members = [
   "crates/basealloc-alloc",
+  "crates/basealloc-fixed",
   "crates/basealloc-list",
   "crates/basealloc-sys",
   "ffi",
@@ -36,5 +37,6 @@ heapless = "0.9.1"
 
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }
-basealloc-alloc = { path = "crates/basealloc-alloc" }
+basealloc-fixed = { path = "crates/basealloc-fixed" }
+basealloc-bump = { path = "crates/basealloc-bump" }
 basealloc = { path = "." }

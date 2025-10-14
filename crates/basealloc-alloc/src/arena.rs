@@ -10,7 +10,6 @@ use crate::{
   bump::{
     Bump,
     BumpError,
-    GLOBAL_BUMP,
   },
   config::MAX_ARENAS,
 };
@@ -28,25 +27,15 @@ pub struct Arena {
 }
 
 impl Arena {
-  const SELF_SIZED: usize = core::mem::size_of::<Self>();
-  const SELF_ALIGNED: usize = core::mem::align_of::<Self>();
-
   pub unsafe fn new(chunk_size: usize) -> Result<NonNull<Self>, ArenaError> {
-    let mut gbb = GLOBAL_BUMP.lock();
-    let this = gbb
-      .allocate(Self::SELF_SIZED, Self::SELF_ALIGNED)
-      .map_err(ArenaError::Bump)?;
-
-    let ptr = this.as_mut_ptr() as *mut Self;
-
-    let bump = Bump::new(chunk_size);
+    let mut bump = Bump::new(chunk_size);
+    let this = bump.create::<Self>().map_err(ArenaError::Bump)? as *mut Self;
     let tmp = Self {
       _bump: bump,
       _lock: Mutex::new(()),
     };
-
-    unsafe { ptr.write(tmp) };
-    Ok(unsafe { NonNull::new_unchecked(ptr) })
+    unsafe { this.write(tmp) };
+    Ok(unsafe { NonNull::new_unchecked(this) })
   }
 }
 
