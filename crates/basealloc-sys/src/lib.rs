@@ -23,6 +23,7 @@ pub mod prelude {
       min_align,
       page_align,
       page_size,
+      va_size,
       word_width,
     },
     system::{

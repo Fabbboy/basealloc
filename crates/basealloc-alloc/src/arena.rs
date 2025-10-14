@@ -3,16 +3,14 @@ use core::{
   sync::atomic::AtomicPtr,
 };
 
+use basealloc_fixed::bump::{
+  Bump,
+  BumpError,
+};
 use heapless::Vec;
 use spin::Mutex;
 
-use crate::{
-  bump::{
-    Bump,
-    BumpError,
-  },
-  config::MAX_ARENAS,
-};
+use crate::config::MAX_ARENAS;
 
 pub static ARENAS: Vec<AtomicPtr<Arena>, { MAX_ARENAS }> = Vec::new();
 

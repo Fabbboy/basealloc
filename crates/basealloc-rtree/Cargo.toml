@@ -1,8 +1,10 @@
 [package]
-name = "basealloc-fixed"
+name = "basealloc-rtree"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+getset = { workspace = true }
+
 basealloc-sys = { workspace = true }
-basealloc-list = { workspace = true }
+basealloc-fixed = { workspace = true }

@@ -23,7 +23,7 @@ strip = "symbols"
 members = [
   "crates/basealloc-alloc",
   "crates/basealloc-fixed",
-  "crates/basealloc-list",
+  "crates/basealloc-list", "crates/basealloc-rtree",
   "crates/basealloc-sys",
   "ffi",
 ]

@@ -67,6 +67,16 @@ pub fn is_page_aligned(value: usize) -> PrimResult<bool> {
   is_aligned(value, page_size()).ok_or(PrimError::InvalidAlignment)
 }
 
+#[cfg(target_pointer_width = "64")]
+pub fn va_size() -> usize {
+  48
+}
+
+#[cfg(target_pointer_width = "32")]
+pub fn va_size() -> usize {
+  32
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

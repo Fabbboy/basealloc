@@ -26,6 +26,7 @@ dependencies = [
 name = "basealloc-fixed"
 version = "0.1.0"
 dependencies = [
+ "basealloc-list",
  "basealloc-sys",
 ]
 
@@ -33,6 +34,15 @@ dependencies = [
 name = "basealloc-list"
 version = "0.1.0"
 dependencies = [
+ "getset",
+]
+
+[[package]]
+name = "basealloc-rtree"
+version = "0.1.0"
+dependencies = [
+ "basealloc-fixed",
+ "basealloc-sys",
  "getset",
 ]
 

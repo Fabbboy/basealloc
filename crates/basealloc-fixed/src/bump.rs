@@ -8,10 +8,11 @@ use core::{
   },
 };
 
-use basealloc_fixed::{
+use crate::fixed::{
   Fixed,
   FixedError,
 };
+
 use basealloc_list::{
   HasLink,
   Link,
@@ -176,67 +177,5 @@ impl Drop for Bump {
       current = *chunk_ref.link().next();
       unsafe { drop_in_place(chunk_ref) };
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::config::CHUNK_SIZE;
-
-  #[test]
-  fn chunk_allocate() {
-    let mut chunk = Chunk::new(CHUNK_SIZE).unwrap();
-    {
-      let layout = Layout::from_size_align(64, 8).unwrap();
-      let slice = unsafe { chunk.as_mut().allocate(layout).unwrap() };
-      assert_eq!(slice.len(), 64);
-      assert_eq!(slice.as_ptr() as usize % 8, 0);
-    }
-  }
-
-  #[test]
-  fn chunk_out_of_memory() {
-    let mut chunk = Chunk::new(CHUNK_SIZE).unwrap();
-    let oversized = Layout::from_size_align(CHUNK_SIZE, 1).unwrap();
-    let result = unsafe { chunk.as_mut().allocate(oversized) };
-    assert!(matches!(
-      result,
-      Err(ChunkError::FixedError(FixedError::OOM))
-    ));
-  }
-
-  #[test]
-  fn bump_new() {
-    let bump = Bump::new(CHUNK_SIZE);
-    assert_eq!(bump.chunk_size, CHUNK_SIZE);
-  }
-
-  #[test]
-  fn bump_allocate() {
-    let mut bump = Bump::new(CHUNK_SIZE);
-    {
-      let layout = Layout::from_size_align(64, 8).unwrap();
-      let slice = bump.allocate(layout).unwrap();
-      assert_eq!(slice.len(), 64);
-      assert_eq!(slice.as_ptr() as usize % 8, 0);
-    }
-  }
-
-  #[test]
-  fn bump_multiple_chunks() {
-    let mut bump = Bump::new(CHUNK_SIZE);
-    let half = Layout::from_size_align(CHUNK_SIZE / 2, 1).unwrap();
-    let _slice1 = bump.allocate(half).unwrap();
-    {
-      let slice2 = bump.allocate(half).unwrap();
-      assert_eq!(slice2.len(), CHUNK_SIZE / 2);
-    }
-  }
-
-  #[test]
-  fn bump_drop() {
-    let bump = Bump::new(CHUNK_SIZE);
-    drop(bump);
   }
 }

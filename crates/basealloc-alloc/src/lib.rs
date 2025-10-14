@@ -1,12 +1,13 @@
 #![no_std]
 
 pub mod arena;
-pub mod bump;
 
 mod config {
   use basealloc_sys::prim::word_width;
 
   pub const MAX_ARENAS: usize = 256;
+  const BITS_PER_LEVEL: usize = 9;
+  const FANOUT: usize = 1 << BITS_PER_LEVEL;
 
   pub const WORD: usize = word_width();
   pub const WORD_TRAILING: usize = WORD.trailing_zeros() as usize;
