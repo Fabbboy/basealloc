@@ -5,8 +5,8 @@ use std::{
 };
 
 use petgraph::{
-  graph::NodeIndex,
   Graph,
+  graph::NodeIndex,
 };
 use proc_macro2::TokenStream as NewStream;
 use quote::quote;
@@ -17,9 +17,9 @@ use syn::{
 };
 
 use crate::parser::{
-  parse_drop_attribute,
   Directive,
   EdgeTarget,
+  parse_drop_attribute,
 };
 
 struct EdgeRequest {
@@ -147,6 +147,10 @@ impl DropGraph {
     } else {
       self.graph.add_edge(to, from, ());
     }
+  }
+
+  pub fn graph(&self) -> &Graph<Rc<RefCell<Ident>>, ()> {
+    &self.graph
   }
 }
 

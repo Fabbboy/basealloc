@@ -16,7 +16,7 @@ const DROP_ID: &str = "id";
 const DROP_BEFORE: &str = "before";
 const DROP_AFTER: &str = "after";
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum EdgeTarget {
   Alias(String),
   Index(usize),
