@@ -102,7 +102,24 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     (key >> shift) & Self::MASK
   }
 
-  pub fn insert(&mut self, key: usize, value: T) -> RTreeResult<()> {
+  fn ensure_root(&mut self) -> RTreeResult<NNullNode<T, FANOUT>> {
+    if self.root.is_none() {
+      self.root = Some(self.new_node(None)?);
+    }
+    Ok(self.root.unwrap())
+  }
+
+  fn install(mut node: NNullNode<T, FANOUT>, val: NonNull<T>) -> RTreeResult<()> {
+    let n = unsafe { node.as_mut() };
+    if n.value.is_some() {
+      Err(RTreeError::Duplicated)
+    } else {
+      n.value = Some(val);
+      Ok(())
+    }
+  }
+
+  pub fn insert(&mut self, key: usize, val: OptNull<T>) -> RTreeResult<()> {
     todo!()
   }
 
