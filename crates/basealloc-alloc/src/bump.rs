@@ -1,7 +1,11 @@
 use core::{
   alloc::Layout,
+  cmp,
   mem::ManuallyDrop,
-  ptr::NonNull,
+  ptr::{
+    NonNull,
+    drop_in_place,
+  },
 };
 
 use basealloc_fixed::{
@@ -31,7 +35,7 @@ pub enum ChunkError {
   ExtentError(ExtentError),
   PrimError(PrimError),
   FixedError(FixedError),
-  Overflow,
+  Overflow, // fucking keep!!!
 }
 
 pub type ChunkResult<T> = Result<T, ChunkError>;
@@ -54,28 +58,17 @@ impl Chunk {
 
   pub fn new(size: usize) -> ChunkResult<NonNull<Self>> {
     let mut extent = Extent::new(size, SysOption::Commit).map_err(ChunkError::ExtentError)?;
-    let data_offset = Self::data_offset()?;
-    if extent.as_ref().len() < data_offset {
-      return Err(ChunkError::FixedError(FixedError::OOM));
-    }
+    let mut fixed = Fixed::new(extent.as_mut());
+    let chunk_ptr = fixed
+      .create::<Self>(extent.as_mut())
+      .map_err(ChunkError::FixedError)?;
 
-    let (ptr, fixed) = {
-      let slice = extent.as_mut();
-      let (head, tail) = slice.split_at_mut(data_offset);
-      let ptr = head.as_mut_ptr() as *mut Self;
-      (ptr, Fixed::new(tail))
-    };
+    let chunk = unsafe { &mut *chunk_ptr };
+    chunk.link = Link::default();
+    chunk.fixed = fixed;
+    chunk.extent = ManuallyDrop::new(extent);
 
-    let chunk = Self {
-      link: Link::default(),
-      fixed,
-      extent: ManuallyDrop::new(extent),
-    };
-
-    unsafe {
-      ptr.write(chunk);
-      Ok(NonNull::new_unchecked(ptr))
-    }
+    Ok(unsafe { NonNull::new_unchecked(chunk_ptr) })
   }
 
   pub fn create<T>(&mut self) -> ChunkResult<&mut T> {
@@ -86,10 +79,10 @@ impl Chunk {
   }
 
   pub fn allocate(&mut self, layout: Layout) -> ChunkResult<&mut [u8]> {
-    let slice = self.extent.as_mut();
+    let extent_slice = self.extent.as_mut();
     self
       .fixed
-      .allocate(slice, layout)
+      .allocate(extent_slice, layout)
       .map_err(ChunkError::FixedError)
   }
 }
@@ -141,40 +134,45 @@ impl Bump {
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {
     if let Some(mut tail) = self.tail {
       unsafe {
-        if let Ok(slice) = tail.as_mut().allocate(layout) {
-          return Ok(slice);
+        match tail.as_mut().allocate(layout) {
+          Ok(slice) => return Ok(slice),
+          Err(err) => return Err(err),
         }
       }
     }
 
     let header = Chunk::data_offset()?;
     let aligned = align_up(layout.size(), layout.align()).ok_or(ChunkError::Overflow)?;
-
-    let required = header
-      .checked_add(aligned)
-      .ok_or(ChunkError::PrimError(PrimError::Overflow))?;
-
-    let chunk_size = core::cmp::max(self.chunk_size, required);
+    let required = header.checked_add(aligned).ok_or(ChunkError::Overflow)?;
+    let chunk_size = cmp::max(self.chunk_size, required);
+    let chunk_size = page_align(chunk_size).map_err(ChunkError::PrimError)?;
 
     let mut new_chunk = Chunk::new(chunk_size)?;
-    let slice = unsafe { new_chunk.as_mut().allocate(layout)? };
 
     if let Some(mut tail) = self.tail {
       unsafe { List::insert_after(new_chunk.as_mut(), tail.as_mut()) };
     } else {
       self.head = Some(new_chunk);
     }
+
     self.tail = Some(new_chunk);
 
-    Ok(slice)
+    unsafe { new_chunk.as_mut().allocate(layout) }
   }
 }
 
 impl Drop for Bump {
   fn drop(&mut self) {
-    if let Some(mut head) = self.head {
-      let _ = unsafe { List::drain(head.as_mut()) };
+    let mut current = self.head;
+    while let Some(mut ptr) = current {
+      unsafe {
+        let chunk = ptr.as_mut();
+        current = *chunk.link().next();
+        //drop_in_place(chunk);
+      }
     }
+    self.head = None;
+    self.tail = None;
   }
 }
 
