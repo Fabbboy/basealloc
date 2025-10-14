@@ -51,7 +51,7 @@ fn fixed_reports_oom() {
   let err = fixed
     .allocate(&mut storage, Layout::from_size_align(1, 1).unwrap())
     .unwrap_err();
-  assert!(matches!(err, FixedError::OOM));
+  assert!(matches!(err, FixedError::OutOfMemory));
 }
 
 #[test]

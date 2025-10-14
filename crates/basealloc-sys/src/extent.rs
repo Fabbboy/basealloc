@@ -11,7 +11,7 @@ use crate::{
 #[derive(Debug)]
 pub enum ExtentError {
   SystemError(SysError),
-  OOB,
+  OutOfBounds,
 }
 
 pub type ExtentResult<T> = Result<T, ExtentError>;
@@ -29,7 +29,7 @@ impl Extent {
 
   fn check(&self, range: Range<usize>) -> ExtentResult<()> {
     if range.start > range.end || range.end > self.slice.len() {
-      return Err(ExtentError::OOB);
+      return Err(ExtentError::OutOfBounds);
     }
     Ok(())
   }
@@ -130,7 +130,7 @@ mod tests {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(0..ps + 1, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OOB)));
+    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
   }
 
   #[test]
@@ -138,7 +138,7 @@ mod tests {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(ps + 1..ps + 2, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OOB)));
+    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
   }
 
   #[test]
@@ -146,7 +146,7 @@ mod tests {
     let ps = page_size();
     let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
     let result = extent.modify(100..50, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OOB)));
+    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
   }
 
   #[test]
@@ -162,11 +162,11 @@ mod tests {
   fn test_extent_check_invalid() {
     let ps = page_size();
     let extent = Extent::new(ps, SysOption::Commit).unwrap();
-    assert!(matches!(extent.check(0..ps + 1), Err(ExtentError::OOB)));
-    assert!(matches!(extent.check(100..50), Err(ExtentError::OOB)));
+    assert!(matches!(extent.check(0..ps + 1), Err(ExtentError::OutOfBounds)));
+    assert!(matches!(extent.check(100..50), Err(ExtentError::OutOfBounds)));
     assert!(matches!(
       extent.check(ps + 1..ps + 2),
-      Err(ExtentError::OOB)
+      Err(ExtentError::OutOfBounds)
     ));
   }
 

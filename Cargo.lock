@@ -17,6 +17,7 @@ version = "0.1.0"
 dependencies = [
  "basealloc-fixed",
  "basealloc-list",
+ "basealloc-rtree",
  "basealloc-sys",
  "heapless",
  "spin",

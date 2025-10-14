@@ -4,7 +4,7 @@ use basealloc_sys::math::align_up;
 
 #[derive(Debug)]
 pub enum FixedError {
-  OOM,
+  OutOfMemory,
   Invalid,
 }
 
@@ -38,7 +38,7 @@ impl Fixed {
   ) -> FixedResult<&'slice mut [u8]> {
     let required = self.required(layout)?;
     if !self.has(required) {
-      return Err(FixedError::OOM);
+      return Err(FixedError::OutOfMemory);
     }
 
     let start = align_up(slice.as_ptr() as usize + self.offset, layout.align())
@@ -46,14 +46,14 @@ impl Fixed {
       - slice.as_ptr() as usize;
     let end = start.checked_add(required).ok_or(FixedError::Invalid)?;
     if end > slice.len() {
-      return Err(FixedError::OOM);
+      return Err(FixedError::OutOfMemory);
     }
 
     self.offset = end;
     Ok(&mut slice[start..end])
   }
 
-  pub fn create<'slice, T>(&mut self, slice: &'slice mut [u8]) -> FixedResult<*mut T> {
+  pub fn create<T>(&mut self, slice: &mut [u8]) -> FixedResult<*mut T> {
     let layout = Layout::new::<T>();
     let bytes = self.allocate(slice, layout)?;
     if bytes.len() < layout.size() {
