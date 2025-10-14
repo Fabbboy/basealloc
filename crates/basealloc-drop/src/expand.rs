@@ -138,7 +138,7 @@ fn process_field(
 
   let dropf_wrapped = Rc::new(RefCell::new(dropf));
   let this_id = graph.add_node(dropf_wrapped.clone());
-  lookup.insert(ident.clone(), graph.node_indices().last().unwrap());
+  lookup.insert(ident.clone(), this_id);
 
   for attr in &field.attrs {
     match &attr.meta {
