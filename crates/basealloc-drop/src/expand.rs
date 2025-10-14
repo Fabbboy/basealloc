@@ -41,7 +41,10 @@ fn expand_drop_internal(ast: DeriveInput) -> Result<NewStream, NewStream> {
     let node = &drop_graph.graph()[node_idx];
     let field_ident = &*node.borrow();
     quote! {
-      std::ptr::drop_in_place(&mut self.#field_ident);
+      unsafe {
+        core::ptr::drop_in_place(&mut self.#field_ident);
+        core::mem::forget(&mut self.#field_ident);
+      };
     }
   });
 

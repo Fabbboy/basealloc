@@ -8,6 +8,7 @@ use core::{
   },
 };
 
+use basealloc_drop::DropOrder;
 use basealloc_fixed::{
   Fixed,
   FixedError,
@@ -40,10 +41,13 @@ pub enum ChunkError {
 
 pub type ChunkResult<T> = Result<T, ChunkError>;
 
+#[derive(DropOrder)]
 pub struct Chunk {
-  link: ManuallyDrop<Link<Self>>,
-  fixed: ManuallyDrop<Fixed>,
-  extent: ManuallyDrop<Extent>,
+  #[drop(before = "extent")]
+  link: Link<Self>,
+  #[drop(before = "extent")]
+  fixed: Fixed,
+  extent: Extent,
 }
 
 impl Chunk {
@@ -64,9 +68,9 @@ impl Chunk {
       .map_err(ChunkError::FixedError)?;
 
     let chunk = unsafe { &mut *chunk_ptr };
-    chunk.link = ManuallyDrop::new(Link::default());
-    chunk.fixed = ManuallyDrop::new(fixed);
-    chunk.extent = ManuallyDrop::new(extent);
+    chunk.link = Link::default();
+    chunk.fixed = fixed;
+    chunk.extent = extent;
 
     Ok(unsafe { NonNull::new_unchecked(chunk_ptr) })
   }
@@ -84,16 +88,6 @@ impl Chunk {
       .fixed
       .allocate(extent_slice, layout)
       .map_err(ChunkError::FixedError)
-  }
-}
-
-impl Drop for Chunk {
-  fn drop(&mut self) {
-    unsafe {
-      ManuallyDrop::drop(&mut self.link);
-      ManuallyDrop::drop(&mut self.fixed);
-      ManuallyDrop::drop(&mut self.extent);
-    }
   }
 }
 

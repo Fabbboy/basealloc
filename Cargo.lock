@@ -15,6 +15,7 @@ dependencies = [
 name = "basealloc-alloc"
 version = "0.1.0"
 dependencies = [
+ "basealloc-drop",
  "basealloc-fixed",
  "basealloc-list",
  "basealloc-sys",
