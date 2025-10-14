@@ -8,6 +8,6 @@ proc-macro = true
 
 [dependencies]
 quote = { workspace = true }
-syn = { workspace = true }
+syn = { workspace = true, features = ["full"] }
 proc-macro2 = { workspace = true }
 petgraph = { workspace = true }
