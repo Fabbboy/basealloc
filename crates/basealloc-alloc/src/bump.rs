@@ -132,12 +132,12 @@ impl Bump {
     Chunk::new(chunk_size)
   }
 
-  pub fn create<T>(&mut self) -> BumpResult<&mut T> {
+  pub fn create<T>(&mut self) -> BumpResult<*mut T> {
     let layout = Layout::new::<T>();
     let bytes = self.allocate(layout)?;
     let ptr = bytes.as_mut_ptr() as *mut T;
     unsafe { ptr.write(core::mem::zeroed()) };
-    Ok(unsafe { &mut *ptr })
+    Ok(ptr)
   }
 
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {

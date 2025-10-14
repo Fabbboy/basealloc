@@ -29,7 +29,7 @@ pub struct Arena {
 impl Arena {
   pub unsafe fn new(chunk_size: usize) -> Result<NonNull<Self>, ArenaError> {
     let mut bump = Bump::new(chunk_size);
-    let this = bump.create::<Self>().map_err(ArenaError::Bump)? as *mut Self;
+    let this = bump.create::<Self>().map_err(ArenaError::Bump)?;
     let tmp = Self {
       _bump: bump,
       _lock: Mutex::new(()),
