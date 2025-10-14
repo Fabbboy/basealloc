@@ -22,7 +22,6 @@ strip = "symbols"
 [workspace]
 members = [
   "crates/basealloc-alloc",
-  "crates/basealloc-drop",
   "crates/basealloc-fixed",
   "crates/basealloc-list",
   "crates/basealloc-sys",
@@ -36,14 +35,8 @@ getset = "0.1.6"
 spin = "0.10.0"
 heapless = "0.9.1"
 
-quote = "1.0.41"
-syn = "2.0.106"
-proc-macro2 = "1.0.101"
-petgraph = "0.8.3"
-
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }
 basealloc-fixed = { path = "crates/basealloc-fixed" }
 basealloc-bump = { path = "crates/basealloc-bump" }
-basealloc-drop = { path = "crates/basealloc-drop" }
 basealloc = { path = "." }

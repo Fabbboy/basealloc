@@ -7,7 +7,6 @@ edition = "2024"
 basealloc-sys = { workspace = true }
 basealloc-list = { workspace = true }
 basealloc-fixed = { workspace = true }
-basealloc-drop = { workspace = true }
 
 spin = { workspace = true }
 heapless = { workspace = true }
