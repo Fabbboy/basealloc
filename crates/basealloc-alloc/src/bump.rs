@@ -41,8 +41,8 @@ pub enum ChunkError {
 pub type ChunkResult<T> = Result<T, ChunkError>;
 
 pub struct Chunk {
-  link: Link<Self>,
-  fixed: Fixed,
+  link: ManuallyDrop<Link<Self>>,
+  fixed: ManuallyDrop<Fixed>,
   extent: ManuallyDrop<Extent>,
 }
 
@@ -64,8 +64,8 @@ impl Chunk {
       .map_err(ChunkError::FixedError)?;
 
     let chunk = unsafe { &mut *chunk_ptr };
-    chunk.link = Link::default();
-    chunk.fixed = fixed;
+    chunk.link = ManuallyDrop::new(Link::default());
+    chunk.fixed = ManuallyDrop::new(fixed);
     chunk.extent = ManuallyDrop::new(extent);
 
     Ok(unsafe { NonNull::new_unchecked(chunk_ptr) })
@@ -90,6 +90,8 @@ impl Chunk {
 impl Drop for Chunk {
   fn drop(&mut self) {
     unsafe {
+      ManuallyDrop::drop(&mut self.link);
+      ManuallyDrop::drop(&mut self.fixed);
       ManuallyDrop::drop(&mut self.extent);
     }
   }
@@ -164,8 +166,10 @@ impl Bump {
 impl Drop for Bump {
   fn drop(&mut self) {
     let mut current = self.head;
-    while let Some(mut ptr) = current {
-      let chunk_ref = unsafe { ptr.as_mut() };
+    let as_ref = |mut ptr: NonNull<Chunk>| unsafe { ptr.as_mut() };
+
+    while let Some(ptr) = current {
+      let chunk_ref = as_ref(ptr);
       List::remove(chunk_ref);
       current = *chunk_ref.link().next();
       unsafe { drop_in_place(chunk_ref) };
