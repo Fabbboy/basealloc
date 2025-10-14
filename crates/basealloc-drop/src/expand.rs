@@ -67,7 +67,8 @@ fn process_field_named(
   this_id: NodeIndex,
   field: Rc<RefCell<DropField>>,
   meta: &MetaNameValue,
-  lookup: &HashMap<Ident, NodeIndex>,
+  ident_idx: &mut HashMap<Ident, NodeIndex>,
+  canon_idx: &mut HashMap<usize, NodeIndex>,
 ) -> Result<(), NewStream> {
   let mut lfield = field.borrow_mut();
 
@@ -88,6 +89,7 @@ fn process_field_named(
     // accepted forms:
     // #[drop(before = "fieldname")]
     // #[drop(before = ["fieldname1", "fieldname2"])]
+    
   }
 
   Ok(())
@@ -97,7 +99,8 @@ fn process_field_attr(
   this_id: NodeIndex,
   field: Rc<RefCell<DropField>>,
   list: &MetaList,
-  lookup: &HashMap<Ident, NodeIndex>,
+  ident_idx: &mut HashMap<Ident, NodeIndex>,
+  canon_idx: &mut HashMap<usize, NodeIndex>,
 ) -> Result<(), NewStream> {
   if !list.path.is_ident(DROP_ATTR) {
     return Ok(());
@@ -116,7 +119,9 @@ fn process_field_attr(
     match item {
       Meta::Path(_) => return Err(quote! { compile_error!("Malformed attribute parameters"); }),
       Meta::List(_) => return Err(quote! { compile_error!("Malformed attribute parameters"); }),
-      Meta::NameValue(nv) => process_field_named(this_id, field.clone(), &nv, lookup)?,
+      Meta::NameValue(nv) => {
+        process_field_named(this_id, field.clone(), &nv, ident_idx, canon_idx)?
+      }
     }
   }
 
@@ -127,7 +132,8 @@ fn process_field(
   canonical: usize,
   field: &Field,
   graph: &mut Graph<Rc<RefCell<DropField>>, ()>,
-  lookup: &mut HashMap<Ident, NodeIndex>,
+  ident_idx: &mut HashMap<Ident, NodeIndex>,
+  canon_idx: &mut HashMap<usize, NodeIndex>,
 ) -> Result<(), NewStream> {
   let ident = ensure_named(field)?;
 
@@ -138,14 +144,19 @@ fn process_field(
 
   let dropf_wrapped = Rc::new(RefCell::new(dropf));
   let this_id = graph.add_node(dropf_wrapped.clone());
-  lookup.insert(ident.clone(), this_id);
+  ident_idx.insert(ident.clone(), this_id);
+  canon_idx.insert(canonical, this_id);
 
   for attr in &field.attrs {
     match &attr.meta {
       Meta::Path(_) => {} // #[drop]
-      Meta::List(meta_list) => {
-        process_field_attr(this_id, dropf_wrapped.clone(), meta_list, &lookup)?
-      }
+      Meta::List(meta_list) => process_field_attr(
+        this_id,
+        dropf_wrapped.clone(),
+        meta_list,
+        ident_idx,
+        canon_idx,
+      )?,
       Meta::NameValue(_) => {}
     }
   }
@@ -157,10 +168,17 @@ pub fn expand_drop(ast: DeriveInput) -> NewStream {
   let struct_data = res_ret!(ensure_struct(&ast));
 
   let mut graph = Graph::<Rc<RefCell<DropField>>, ()>::new();
-  let mut lookup = HashMap::<Ident, NodeIndex>::new();
+  let mut canon_idx = HashMap::<usize, NodeIndex>::new();
+  let mut ident_idx = HashMap::<Ident, NodeIndex>::new();
 
   for (i, field) in struct_data.fields.iter().enumerate() {
-    res_ret!(process_field(i, field, &mut graph, &mut lookup));
+    res_ret!(process_field(
+      i,
+      field,
+      &mut graph,
+      &mut ident_idx,
+      &mut canon_idx
+    ));
   }
 
   quote! {}
