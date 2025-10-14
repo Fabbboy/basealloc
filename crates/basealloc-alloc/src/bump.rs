@@ -123,6 +123,15 @@ impl Bump {
     }
   }
 
+  fn obtain_chunk(&self, layout: Layout) -> BumpResult<NonNull<Chunk>> {
+    let header = Chunk::data_offset()?;
+    let aligned = align_up(layout.size(), layout.align()).ok_or(ChunkError::Overflow)?;
+    let required = header.checked_add(aligned).ok_or(ChunkError::Overflow)?;
+    let chunk_size = cmp::max(self.chunk_size, required);
+    let chunk_size = page_align(chunk_size).map_err(ChunkError::PrimError)?;
+    Chunk::new(chunk_size)
+  }
+
   pub fn create<T>(&mut self) -> BumpResult<&mut T> {
     let layout = Layout::new::<T>();
     let bytes = self.allocate(layout)?;
@@ -133,21 +142,12 @@ impl Bump {
 
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {
     if let Some(mut tail) = self.tail {
-      unsafe {
-        match tail.as_mut().allocate(layout) {
-          Ok(slice) => return Ok(slice),
-          Err(err) => return Err(err),
-        }
+      if let Ok(slice) = unsafe { tail.as_mut().allocate(layout) } {
+        return Ok(slice);
       }
     }
 
-    let header = Chunk::data_offset()?;
-    let aligned = align_up(layout.size(), layout.align()).ok_or(ChunkError::Overflow)?;
-    let required = header.checked_add(aligned).ok_or(ChunkError::Overflow)?;
-    let chunk_size = cmp::max(self.chunk_size, required);
-    let chunk_size = page_align(chunk_size).map_err(ChunkError::PrimError)?;
-
-    let mut new_chunk = Chunk::new(chunk_size)?;
+    let mut new_chunk = self.obtain_chunk(layout)?;
 
     if let Some(mut tail) = self.tail {
       unsafe { List::insert_after(new_chunk.as_mut(), tail.as_mut()) };
@@ -165,14 +165,11 @@ impl Drop for Bump {
   fn drop(&mut self) {
     let mut current = self.head;
     while let Some(mut ptr) = current {
-      unsafe {
-        let chunk = ptr.as_mut();
-        current = *chunk.link().next();
-        //drop_in_place(chunk);
-      }
+      let chunk_ref = unsafe { ptr.as_mut() };
+      List::remove(chunk_ref);
+      current = *chunk_ref.link().next();
+      unsafe { drop_in_place(chunk_ref) };
     }
-    self.head = None;
-    self.tail = None;
   }
 }
 
