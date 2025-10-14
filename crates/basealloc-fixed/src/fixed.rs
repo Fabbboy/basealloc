@@ -1,4 +1,10 @@
-use core::alloc::Layout;
+use core::{
+  alloc::Layout,
+  sync::atomic::{
+    AtomicUsize,
+    Ordering,
+  },
+};
 
 use basealloc_sys::math::align_up;
 
@@ -12,23 +18,65 @@ pub type FixedResult<T> = Result<T, FixedError>;
 
 pub struct Fixed {
   max: usize,
-  offset: usize,
+  offset: AtomicUsize,
 }
 
 impl Fixed {
   pub fn new(slice: &[u8]) -> Self {
     let max = slice.len();
-    Self { max, offset: 0 }
+    Self {
+      max,
+      offset: AtomicUsize::new(0),
+    }
   }
 
   fn has(&self, needed: usize) -> bool {
-    self.max - self.offset >= needed
+    let cur = self.offset.load(Ordering::Acquire);
+    if self.max < needed {
+      return false;
+    }
+    cur <= self.max - needed
   }
 
   fn required(&self, layout: Layout) -> FixedResult<usize> {
     let align = layout.align();
     let size = layout.size();
     align_up(size, align).ok_or(FixedError::Invalid)
+  }
+
+  fn start_offset(&self, slice_ptr: usize, current: usize, align: usize) -> FixedResult<usize> {
+    let base_plus = slice_ptr.checked_add(current).ok_or(FixedError::Invalid)?;
+    let aligned = align_up(base_plus, align).ok_or(FixedError::Invalid)?;
+    let start = aligned.checked_sub(slice_ptr).ok_or(FixedError::Invalid)?;
+    Ok(start)
+  }
+
+  fn end_range(&self, start: usize, required: usize) -> FixedResult<usize> {
+    let end = start.checked_add(required).ok_or(FixedError::Invalid)?;
+    Ok(end)
+  }
+
+  fn reserve(&self, slice_ptr: usize, required: usize, align: usize) -> FixedResult<usize> {
+    loop {
+      let current = self.offset.load(Ordering::Acquire);
+
+      let start = self.start_offset(slice_ptr, current, align)?;
+      let end = self.end_range(start, required)?;
+
+      if end > self.max {
+        return Err(FixedError::OutOfMemory);
+      }
+
+      match self
+        .offset
+        .compare_exchange(current, end, Ordering::AcqRel, Ordering::Acquire)
+      {
+        Ok(_) => return Ok(start),
+        Err(_) => {
+          continue;
+        }
+      }
+    }
   }
 
   pub fn allocate<'slice>(
@@ -41,15 +89,13 @@ impl Fixed {
       return Err(FixedError::OutOfMemory);
     }
 
-    let start = align_up(slice.as_ptr() as usize + self.offset, layout.align())
-      .ok_or(FixedError::Invalid)?
-      - slice.as_ptr() as usize;
+    let slice_ptr = slice.as_ptr() as usize;
+    let start = self.reserve(slice_ptr, required, layout.align())?;
     let end = start.checked_add(required).ok_or(FixedError::Invalid)?;
     if end > slice.len() {
       return Err(FixedError::OutOfMemory);
     }
 
-    self.offset = end;
     Ok(&mut slice[start..end])
   }
 
@@ -63,3 +109,6 @@ impl Fixed {
     Ok(bytes.as_mut_ptr() as *mut T)
   }
 }
+
+unsafe impl Send for Fixed {}
+unsafe impl Sync for Fixed {}
