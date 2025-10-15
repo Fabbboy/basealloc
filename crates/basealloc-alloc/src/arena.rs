@@ -4,6 +4,7 @@ use basealloc_fixed::bump::{
   Bump,
   BumpError,
 };
+use getset::CloneGetters;
 use spin::Mutex;
 
 #[derive(Debug)]
@@ -11,16 +12,22 @@ pub enum ArenaError {
   Bump(BumpError),
 }
 
+pub type ArenaResult<T> = Result<T, ArenaError>;
+
+#[derive(CloneGetters)]
 pub struct Arena {
+  #[getset(get_clone = "pub")]
+  index: usize,
   _bump: Bump,
   _lock: Mutex<()>,
 }
 
 impl Arena {
-  pub unsafe fn new(chunk_size: usize) -> Result<NonNull<Self>, ArenaError> {
+  pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
     let this = bump.create::<Self>().map_err(ArenaError::Bump)?;
     let tmp = Self {
+      index,
       _bump: bump,
       _lock: Mutex::new(()),
     };
@@ -38,7 +45,7 @@ mod tests {
 
   #[test]
   fn test_arena_creation() {
-    let arena = unsafe { Arena::new(CHUNK_SIZE).expect("Failed to create arena") };
+    let arena = unsafe { Arena::new(0, CHUNK_SIZE).expect("Failed to create arena") };
     unsafe { drop_in_place(arena.as_ptr()) };
   }
 }

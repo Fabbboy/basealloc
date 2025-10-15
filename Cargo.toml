@@ -26,6 +26,7 @@ members = [
   "crates/basealloc-list",
   "crates/basealloc-rtree",
   "crates/basealloc-sys",
+  "crates/basealloc-bitmap",
   "ffi",
 ]
 resolver = "3"
@@ -41,4 +42,5 @@ basealloc-list = { path = "crates/basealloc-list" }
 basealloc-fixed = { path = "crates/basealloc-fixed" }
 basealloc-bump = { path = "crates/basealloc-bump" }
 basealloc-rtree = { path = "crates/basealloc-rtree" }
+basealloc-bitmap = { path = "crates/basealloc-bitmap" }
 basealloc = { path = "." }

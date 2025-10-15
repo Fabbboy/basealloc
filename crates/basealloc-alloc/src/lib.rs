@@ -1,12 +1,13 @@
-#![cfg_attr(not(test), no_std)]
-
-pub mod arena; 
+pub mod arena;
 pub mod static_;
 
 mod config {
+  use basealloc_bitmap::BitmapWord;
   use basealloc_sys::prim::word_width;
 
   pub const MAX_ARENAS: usize = 256;
+  pub const ARENA_BMS: usize = core::mem::size_of::<BitmapWord>() * MAX_ARENAS;
+
   const BITS_PER_LEVEL: usize = 9;
   pub const FANOUT: usize = 1 << BITS_PER_LEVEL;
 

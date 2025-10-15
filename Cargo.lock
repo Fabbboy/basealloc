@@ -15,13 +15,19 @@ dependencies = [
 name = "basealloc-alloc"
 version = "0.1.0"
 dependencies = [
+ "basealloc-bitmap",
  "basealloc-fixed",
  "basealloc-list",
  "basealloc-rtree",
  "basealloc-sys",
+ "getset",
  "heapless",
  "spin",
 ]
+
+[[package]]
+name = "basealloc-bitmap"
+version = "0.1.0"
 
 [[package]]
 name = "basealloc-fixed"
