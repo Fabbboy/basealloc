@@ -24,7 +24,8 @@ pub fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     if let Some(message_str) = message.as_str() {
       libc::fprintf(
         stderr,
-        b"panic: %s\n\0".as_ptr() as *const i8,
+        b"panic: %.*s\n\0".as_ptr() as *const i8,
+        message_str.len() as i32,
         message_str.as_ptr() as *const i8,
       );
     } else {
@@ -34,8 +35,9 @@ pub fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     if let Some(loc) = info.location() {
       libc::fprintf(
         stderr,
-        b"at %s:%d:%d\n\0".as_ptr() as *const i8,
-        loc.file().as_ptr(),
+        b"at %.*s:%d:%d\n\0".as_ptr() as *const i8,
+        loc.file().len() as i32,
+        loc.file().as_ptr() as *const i8,
         loc.line() as i32,
         loc.column() as i32,
       );
