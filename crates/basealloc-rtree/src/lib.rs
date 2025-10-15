@@ -3,6 +3,10 @@
 use core::{
   marker::PhantomData,
   ptr::NonNull,
+  sync::atomic::{
+    AtomicPtr,
+    Ordering,
+  },
 };
 
 use basealloc_fixed::bump::{
@@ -10,10 +14,6 @@ use basealloc_fixed::bump::{
   BumpError,
 };
 use basealloc_sys::prim::va_size;
-use getset::{
-  Getters,
-  MutGetters,
-};
 
 #[derive(Debug)]
 pub enum RTreeError {
@@ -22,46 +22,47 @@ pub enum RTreeError {
 }
 
 pub type RTreeResult<T> = Result<T, RTreeError>;
-type OptNull<T> = Option<NonNull<T>>;
-type OptNode<T, const FANOUT: usize> = OptNull<RNode<T, FANOUT>>;
-type NodePtr<T, const FANOUT: usize> = NonNull<RNode<T, FANOUT>>;
 
-#[derive(Getters, MutGetters)]
 struct RNode<T, const FANOUT: usize> {
-  #[getset(get = "pub", get_mut = "pub")]
-  value: OptNull<T>,
-  #[getset(get = "pub", get_mut = "pub")]
-  children: [OptNode<T, FANOUT>; FANOUT],
-  #[getset(get = "pub", get_mut = "pub")]
-  parent: OptNode<T, FANOUT>,
+  value: Option<AtomicPtr<T>>,
+  children: [Option<AtomicPtr<RNode<T, FANOUT>>>; FANOUT],
+  parent: Option<AtomicPtr<RNode<T, FANOUT>>>,
 }
 
 impl<T, const FANOUT: usize> RNode<T, FANOUT> {
-  pub fn new(value: OptNull<T>) -> Self {
-    let children = core::array::from_fn(|_| None);
-
+  pub fn new(value: Option<NonNull<T>>) -> Self {
     Self {
-      value,
-      children,
+      value: value.map(|ptr| AtomicPtr::new(ptr.as_ptr())),
+      children: core::array::from_fn(|_| None),
       parent: None,
     }
   }
 
   #[inline(always)]
-  fn child(&self, idx: usize) -> OptNode<T, FANOUT> {
-    self.children[idx]
+  fn child(&self, idx: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
+    let atomic = self.children[idx].as_ref()?;
+    let raw = atomic.load(Ordering::Acquire);
+    // SAFETY: Child pointers are always initialised with a non-null address.
+    Some(unsafe { NonNull::new_unchecked(raw) })
   }
 
   #[inline(always)]
-  fn set_child(&mut self, idx: usize, node: NodePtr<T, FANOUT>) {
-    self.children[idx] = Some(node);
+  fn set_child(&mut self, idx: usize, node: NonNull<RNode<T, FANOUT>>) {
+    if let Some(child) = self.children[idx].as_ref() {
+      child.store(node.as_ptr(), Ordering::Release);
+    } else {
+      self.children[idx] = Some(AtomicPtr::new(node.as_ptr()));
+    }
   }
 
-  fn clear_slot(&mut self, target: NodePtr<T, FANOUT>) -> bool {
+  fn clear_slot(&mut self, target: NonNull<RNode<T, FANOUT>>) -> bool {
     for child in self.children.iter_mut() {
-      if child.map_or(false, |ptr| ptr == target) {
-        *child = None;
-        return true;
+      match child {
+        Some(ptr) if ptr.load(Ordering::Acquire) == target.as_ptr() => {
+          *child = None;
+          return true;
+        }
+        _ => {}
       }
     }
     false
@@ -70,7 +71,7 @@ impl<T, const FANOUT: usize> RNode<T, FANOUT> {
 
 pub struct RTree<T, const FANOUT: usize> {
   bump: Bump,
-  root: OptNode<T, FANOUT>,
+  root: Option<AtomicPtr<RNode<T, FANOUT>>>,
   marker: PhantomData<T>,
 }
 
@@ -90,7 +91,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     (va_size() + Self::BPL - 1) / Self::BPL
   }
 
-  fn new_node(&mut self, value: OptNull<T>) -> RTreeResult<NodePtr<T, FANOUT>> {
+  fn new_node(&mut self, value: Option<NonNull<T>>) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
     let node = self
       .bump
       .create::<RNode<T, FANOUT>>()
@@ -98,6 +99,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
     let tmp = RNode::new(value);
     unsafe { node.write(tmp) };
+    // SAFETY: `Bump::create` never returns a null pointer on success.
     Ok(unsafe { NonNull::new_unchecked(node) })
   }
 
@@ -107,24 +109,29 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     (key >> shift) & Self::MASK
   }
 
-  fn ensure_root(&mut self) -> RTreeResult<NodePtr<T, FANOUT>> {
-    if self.root.is_none() {
-      self.root = Some(self.new_node(None)?);
+  fn ensure_root(&mut self) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
+    if let Some(existing) = self.root.as_ref() {
+      let raw = existing.load(Ordering::Acquire);
+      // SAFETY: Root is only stored as a valid, non-null pointer.
+      return Ok(unsafe { NonNull::new_unchecked(raw) });
     }
-    Ok(self.root.unwrap())
+
+    let new_root = self.new_node(None)?;
+    self.root = Some(AtomicPtr::new(new_root.as_ptr()));
+    Ok(new_root)
   }
 
-  fn store(mut node: NodePtr<T, FANOUT>, val: NonNull<T>) -> RTreeResult<()> {
+  fn store(mut node: NonNull<RNode<T, FANOUT>>, val: NonNull<T>) -> RTreeResult<()> {
     let n = unsafe { node.as_mut() };
     if n.value.is_some() {
       Err(RTreeError::AlreadyPresent)
     } else {
-      n.value = Some(val);
+      n.value = Some(AtomicPtr::new(val.as_ptr()));
       Ok(())
     }
   }
 
-  pub fn insert(&mut self, key: usize, val: OptNull<T>) -> RTreeResult<()> {
+  pub fn insert(&mut self, key: usize, val: Option<NonNull<T>>) -> RTreeResult<()> {
     let Some(value) = val else {
       let _ = self.remove(key);
       return Ok(());
@@ -136,30 +143,41 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
   pub fn lookup(&self, key: usize) -> Option<&T> {
     let node = self.leaf(key)?;
-    unsafe { node.as_ref().value().as_ref().map(|value| value.as_ref()) }
+    let node_ref = unsafe { node.as_ref() };
+    let atomic = node_ref.value.as_ref()?;
+    let raw = atomic.load(Ordering::Acquire);
+    // SAFETY: Values are only stored as valid, non-null pointers.
+    let value = unsafe { NonNull::new_unchecked(raw) };
+    Some(unsafe { value.as_ref() })
   }
 
   pub fn lookup_mut(&mut self, key: usize) -> Option<&mut T> {
     let mut node = self.leaf(key)?;
-    unsafe {
-      node
-        .as_mut()
-        .value_mut()
-        .as_mut()
-        .map(|value| value.as_mut())
-    }
+    let node_mut = unsafe { node.as_mut() };
+    let atomic = node_mut.value.as_ref()?;
+    let raw = atomic.load(Ordering::Acquire);
+    // SAFETY: Values are only stored as valid, non-null pointers.
+    let mut value = unsafe { NonNull::new_unchecked(raw) };
+    Some(unsafe { value.as_mut() })
   }
 
   pub fn remove(&mut self, key: usize) -> Option<T> {
     let mut node = self.leaf(key)?;
-    let value_ptr = unsafe { node.as_mut().value_mut().take()? };
+    let node_mut = unsafe { node.as_mut() };
+    let atomic = node_mut.value.take()?;
+    let raw = atomic.into_inner();
+    // SAFETY: Values are only stored as valid, non-null pointers.
+    let value_ptr = unsafe { NonNull::new_unchecked(raw) };
     let value = unsafe { value_ptr.as_ptr().read() };
     self.prune(node);
     Some(value)
   }
 
-  fn leaf(&self, key: usize) -> OptNode<T, FANOUT> {
-    let mut current = self.root?;
+  fn leaf(&self, key: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
+    let root_atomic = self.root.as_ref()?;
+    let raw = root_atomic.load(Ordering::Acquire);
+    // SAFETY: Root pointers are only stored as valid, non-null addresses.
+    let mut current = unsafe { NonNull::new_unchecked(raw) };
     let levels = Self::levels();
 
     for level in 0..levels {
@@ -171,7 +189,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     Some(current)
   }
 
-  fn ensure_leaf(&mut self, key: usize) -> RTreeResult<NodePtr<T, FANOUT>> {
+  fn ensure_leaf(&mut self, key: usize) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
     let mut current = self.ensure_root()?;
     let levels = Self::levels();
 
@@ -185,42 +203,43 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
   fn ensure_child(
     &mut self,
-    mut parent: NodePtr<T, FANOUT>,
+    mut parent: NonNull<RNode<T, FANOUT>>,
     idx: usize,
-  ) -> RTreeResult<NodePtr<T, FANOUT>> {
+  ) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
     if let Some(child) = unsafe { parent.as_ref().child(idx) } {
       return Ok(child);
     }
 
     let mut new_child = self.new_node(None)?;
     unsafe {
-      new_child.as_mut().parent = Some(parent);
+      new_child.as_mut().parent = Some(AtomicPtr::new(parent.as_ptr()));
       parent.as_mut().set_child(idx, new_child);
     }
 
     Ok(new_child)
   }
 
-  fn prune(&mut self, mut node: NodePtr<T, FANOUT>) {
+  fn prune(&mut self, mut node: NonNull<RNode<T, FANOUT>>) {
     loop {
       let should_remove = {
         let n = unsafe { node.as_ref() };
-        n.value().is_none() && n.children().iter().all(|child| child.is_none())
+        n.value.is_none() && n.children.iter().all(|child| child.is_none())
       };
 
       if !should_remove {
         break;
       }
 
-      let parent = unsafe { *node.as_ref().parent() };
+      let parent_atomic = unsafe { node.as_ref() }.parent.as_ref();
 
-      match parent {
-        Some(mut parent_ptr) => {
-          unsafe {
-            let parent_node = parent_ptr.as_mut();
-            let _ = parent_node.clear_slot(node);
-          }
-          node = parent_ptr;
+      match parent_atomic {
+        Some(parent_ptr) => {
+          let raw = parent_ptr.load(Ordering::Acquire);
+          // SAFETY: Parent pointers are only stored as valid, non-null addresses.
+          let mut parent_node_ptr = unsafe { NonNull::new_unchecked(raw) };
+          let parent_node = unsafe { parent_node_ptr.as_mut() };
+          let _ = parent_node.clear_slot(node);
+          node = parent_node_ptr;
         }
         None => {
           self.root = None;

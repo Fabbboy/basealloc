@@ -162,8 +162,14 @@ mod tests {
   fn test_extent_check_invalid() {
     let ps = page_size();
     let extent = Extent::new(ps, SysOption::Commit).unwrap();
-    assert!(matches!(extent.check(0..ps + 1), Err(ExtentError::OutOfBounds)));
-    assert!(matches!(extent.check(100..50), Err(ExtentError::OutOfBounds)));
+    assert!(matches!(
+      extent.check(0..ps + 1),
+      Err(ExtentError::OutOfBounds)
+    ));
+    assert!(matches!(
+      extent.check(100..50),
+      Err(ExtentError::OutOfBounds)
+    ));
     assert!(matches!(
       extent.check(ps + 1..ps + 2),
       Err(ExtentError::OutOfBounds)
