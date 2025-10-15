@@ -59,8 +59,6 @@ impl Static {
   }
 }
 
-impl Static {}
-
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
 static STATIC: LazyLock<Static> = LazyLock::new(|| {
   let s = Static::new(&BM_STORE);
