@@ -18,22 +18,45 @@ const fn log2c(mut x: usize) -> usize {
 }
 
 #[derive(Clone)]
-pub struct SizeClass {
-  size: usize,
-  pages: usize,
-}
+pub struct SizeClass(usize);
 
 #[derive(Clone)]
 pub struct SizeClassIndex(usize);
 
-static CLASSES: OnceLock<[SizeClass; NSCLASSES]> = OnceLock::new();
+#[derive(Clone)]
+pub struct PageSize(usize);
 
-fn generate_classes() -> [SizeClass; NSCLASSES] {
-  todo!()
+static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
+static PAGES: OnceLock<[PageSize; NSCLASSES]> = OnceLock::new();
+
+fn gcd(mut a: usize, mut b: usize) -> usize {
+  while b != 0 {
+    let t = b;
+    b = a % b;
+    a = t;
+  }
+  a
 }
 
-fn ensure_classes() -> &'static [SizeClass; NSCLASSES] {
-  CLASSES.get_or_init(|| generate_classes())
+fn generate_pages() -> [PageSize; NSCLASSES] {
+  let mut pages = [const { PageSize(0) }; NSCLASSES];
+  let ps = page_size();
+
+  for (i, class) in CLASSES.iter().enumerate() {
+    let SizeClass(size) = *class;
+    let g = gcd(ps, size);
+    let num_pages = size / g;
+    pages[i] = PageSize(num_pages * ps);
+  }
+  pages
+}
+
+fn ensure_pages() -> &'static [PageSize; NSCLASSES] {
+  PAGES.get_or_init(|| generate_pages())
+}
+
+const fn generate_classes() -> [SizeClass; NSCLASSES] {
+  todo!()
 }
 
 pub fn class_for(size: usize) -> Option<SizeClassIndex> {
