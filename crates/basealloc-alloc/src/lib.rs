@@ -1,4 +1,6 @@
 pub mod arena;
+pub mod bin;
+pub mod classes;
 pub mod static_;
 
 mod config {
@@ -16,4 +18,7 @@ mod config {
 
   pub const CHUNK_SHIFT: usize = 16 + WORD_TRAILING;
   pub const CHUNK_SIZE: usize = 1 << CHUNK_SHIFT;
+
+  pub const NSCLASSES: usize = 128;
+  pub const QUANTUM: usize = WORD * 2;
 }
