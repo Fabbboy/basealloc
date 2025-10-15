@@ -27,17 +27,20 @@ impl Extent {
     Ok(Extent { slice })
   }
 
-  fn check(&self, range: Range<usize>) -> ExtentResult<()> {
+  
+  pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
     if range.start > range.end || range.end > self.slice.len() {
       return Err(ExtentError::OutOfBounds);
     }
     Ok(())
   }
 
-  pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
+  /*
+  // Partially modifying should not be a ting too hard to maintain
+   pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
     self.check(range.clone())?;
     unsafe { GLOBAL_SYSTEM.modify(&self.slice[range], options) }.map_err(ExtentError::SystemError)
-  }
+  }*/
 }
 
 impl AsRef<[u8]> for Extent {
@@ -99,54 +102,6 @@ mod tests {
     assert_eq!(slice.len(), ps);
     slice[0] = 42;
     assert_eq!(slice[0], 42);
-  }
-
-  #[test]
-  fn test_extent_partial_valid_range() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps * 2, SysOption::Commit).unwrap();
-    let result = extent.modify(0..ps, SysOption::Reserve);
-    assert!(result.is_ok());
-  }
-
-  #[test]
-  fn test_extent_partial_full_range() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
-    let result = extent.modify(0..ps, SysOption::Reserve);
-    assert!(result.is_ok());
-  }
-
-  #[test]
-  fn test_extent_partial_empty_range() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
-    let result = extent.modify(100..100, SysOption::Reserve);
-    assert!(result.is_ok());
-  }
-
-  #[test]
-  fn test_extent_partial_oob_end() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
-    let result = extent.modify(0..ps + 1, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
-  }
-
-  #[test]
-  fn test_extent_partial_oob_start() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
-    let result = extent.modify(ps + 1..ps + 2, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
-  }
-
-  #[test]
-  fn test_extent_partial_invalid_range() {
-    let ps = page_size();
-    let mut extent = Extent::new(ps, SysOption::Commit).unwrap();
-    let result = extent.modify(100..50, SysOption::Reserve);
-    assert!(matches!(result, Err(ExtentError::OutOfBounds)));
   }
 
   #[test]
