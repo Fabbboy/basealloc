@@ -1,7 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
 use core::{
-  marker::PhantomData,
   ptr::NonNull,
   sync::atomic::{
     AtomicPtr,
@@ -24,15 +23,15 @@ pub enum RTreeError {
 pub type RTreeResult<T> = Result<T, RTreeError>;
 
 struct RNode<T, const FANOUT: usize> {
-  value: Option<AtomicPtr<T>>,
+  value: Option<T>,
   children: [Option<AtomicPtr<RNode<T, FANOUT>>>; FANOUT],
   parent: Option<AtomicPtr<RNode<T, FANOUT>>>,
 }
 
 impl<T, const FANOUT: usize> RNode<T, FANOUT> {
-  pub fn new(value: Option<NonNull<T>>) -> Self {
+  pub fn new(value: Option<T>) -> Self {
     Self {
-      value: value.map(|ptr| AtomicPtr::new(ptr.as_ptr())),
+      value,
       children: core::array::from_fn(|_| None),
       parent: None,
     }
@@ -72,7 +71,6 @@ impl<T, const FANOUT: usize> RNode<T, FANOUT> {
 pub struct RTree<T, const FANOUT: usize> {
   bump: Bump,
   root: Option<AtomicPtr<RNode<T, FANOUT>>>,
-  marker: PhantomData<T>,
 }
 
 impl<T, const FANOUT: usize> RTree<T, FANOUT> {
@@ -83,7 +81,6 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     Self {
       bump: Bump::new(chunk_size),
       root: None,
-      marker: PhantomData,
     }
   }
 
@@ -91,7 +88,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     (va_size() + Self::BPL - 1) / Self::BPL
   }
 
-  fn new_node(&mut self, value: Option<NonNull<T>>) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
+  fn new_node(&mut self, value: Option<T>) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
     let node = self
       .bump
       .create::<RNode<T, FANOUT>>()
@@ -121,17 +118,17 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     Ok(new_root)
   }
 
-  fn store(mut node: NonNull<RNode<T, FANOUT>>, val: NonNull<T>) -> RTreeResult<()> {
+  fn store(mut node: NonNull<RNode<T, FANOUT>>, val: T) -> RTreeResult<()> {
     let n = unsafe { node.as_mut() };
     if n.value.is_some() {
       Err(RTreeError::AlreadyPresent)
     } else {
-      n.value = Some(AtomicPtr::new(val.as_ptr()));
+      n.value = Some(val);
       Ok(())
     }
   }
 
-  pub fn insert(&mut self, key: usize, val: Option<NonNull<T>>) -> RTreeResult<()> {
+  pub fn insert(&mut self, key: usize, val: Option<T>) -> RTreeResult<()> {
     let Some(value) = val else {
       let _ = self.remove(key);
       return Ok(());
@@ -144,33 +141,21 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
   pub fn lookup(&self, key: usize) -> Option<&T> {
     let node = self.leaf(key)?;
     let node_ref = unsafe { node.as_ref() };
-    let atomic = node_ref.value.as_ref()?;
-    let raw = atomic.load(Ordering::Acquire);
-    // SAFETY: Values are only stored as valid, non-null pointers.
-    let value = unsafe { NonNull::new_unchecked(raw) };
-    Some(unsafe { value.as_ref() })
+    node_ref.value.as_ref()
   }
 
   pub fn lookup_mut(&mut self, key: usize) -> Option<&mut T> {
     let mut node = self.leaf(key)?;
     let node_mut = unsafe { node.as_mut() };
-    let atomic = node_mut.value.as_ref()?;
-    let raw = atomic.load(Ordering::Acquire);
-    // SAFETY: Values are only stored as valid, non-null pointers.
-    let mut value = unsafe { NonNull::new_unchecked(raw) };
-    Some(unsafe { value.as_mut() })
+    node_mut.value.as_mut()
   }
 
   pub fn remove(&mut self, key: usize) -> Option<T> {
     let mut node = self.leaf(key)?;
     let node_mut = unsafe { node.as_mut() };
-    let atomic = node_mut.value.take()?;
-    let raw = atomic.into_inner();
-    // SAFETY: Values are only stored as valid, non-null pointers.
-    let value_ptr = unsafe { NonNull::new_unchecked(raw) };
-    let value = unsafe { value_ptr.as_ptr().read() };
+    let val = node_mut.value.take();
     self.prune(node);
-    Some(value)
+    val
   }
 
   fn leaf(&self, key: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
