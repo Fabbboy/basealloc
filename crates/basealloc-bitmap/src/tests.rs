@@ -22,7 +22,11 @@ fn test_multi_word_operations() {
 
 #[test]
 fn test_bulk_operations() {
-  let storage: [AtomicUsize; 3] = [AtomicUsize::new(0), AtomicUsize::new(0), AtomicUsize::new(0)];
+  let storage: [AtomicUsize; 3] = [
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+    AtomicUsize::new(0),
+  ];
   let bits = storage.len() * usize::BITS as usize;
   let bitmap = Bitmap::zero(&storage, bits).unwrap();
 
@@ -156,18 +160,18 @@ fn test_const_functionality() {
   // Test const functions can be used in const contexts
   const WORDS_FOR_64_BITS: usize = Bitmap::words(64);
   const BYTES_FOR_64_BITS: usize = Bitmap::bytes(64);
-  
+
   assert_eq!(WORDS_FOR_64_BITS, 1);
   assert_eq!(BYTES_FOR_64_BITS, 8);
-  
+
   // Test const methods on bitmap instance
   let storage: [AtomicUsize; 1] = [AtomicUsize::new(0)];
   let bitmap = Bitmap::zero(&storage, 64).unwrap();
-  
+
   const fn test_const_methods(bitmap: &Bitmap) -> (usize, usize) {
     (bitmap.bits(), bitmap.available())
   }
-  
+
   let (bits, available) = test_const_methods(&bitmap);
   assert_eq!(bits, 64);
   assert_eq!(available, 64);

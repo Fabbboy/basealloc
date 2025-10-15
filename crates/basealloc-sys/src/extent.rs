@@ -27,7 +27,6 @@ impl Extent {
     Ok(Extent { slice })
   }
 
-  
   pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
     if range.start > range.end || range.end > self.slice.len() {
       return Err(ExtentError::OutOfBounds);

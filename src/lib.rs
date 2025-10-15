@@ -1,15 +1,29 @@
 #![no_std]
 
-use core::alloc::{
-  GlobalAlloc,
-  Layout,
+use core::{
+  alloc::{
+    GlobalAlloc,
+    Layout,
+  },
+  ptr::NonNull,
 };
-pub mod prelude {
-  pub use basealloc_list::prelude::*;
-  pub use basealloc_sys::prelude::*;
-}
 
 pub struct BaseAlloc {}
+
+impl BaseAlloc {
+  pub fn info(ptr: *mut u8) -> Option<Layout> {
+    _ = ptr;
+    None
+  }
+
+  pub fn is_invalid(ptr: *mut u8) -> bool {
+    ptr.is_null() || ptr == Self::sentinel()
+  }
+
+  pub fn sentinel() -> *mut u8 {
+    NonNull::dangling().as_ptr()
+  }
+}
 
 unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {

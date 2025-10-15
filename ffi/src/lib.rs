@@ -1,46 +1,119 @@
 #![no_std]
 
-pub use basealloc::prelude::*;
-use core::ptr;
+use basealloc::BaseAlloc;
+use core::{
+  alloc::{
+    GlobalAlloc,
+    Layout,
+  },
+  ptr::{
+    self,
+  },
+};
 
 mod handler;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn ba_page_size() -> usize {
-  page_size()
-}
+#[global_allocator]
+static ALLOC: BaseAlloc = BaseAlloc {};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn malloc(size: usize) -> *mut u8 {
-  _ = size;
-  ptr::null_mut()
+  if size == 0 {
+    return BaseAlloc::sentinel();
+  }
+
+  let layout = match Layout::from_size_align(size, 1) {
+    Ok(l) => l,
+    Err(_) => return ptr::null_mut(),
+  };
+
+  unsafe { ALLOC.alloc(layout) }
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn free(ptr: *mut u8) {
-  _ = ptr;
-  panic!(
-    "LOOOOOLOLOLOLOLOLOL where did you get a pointer from?????? THAT CAN ONLY BE NULLLLLL HAHAHAHHAAH"
-  );
+  if BaseAlloc::is_invalid(ptr) {
+    return;
+  }
+
+  let info = BaseAlloc::info(ptr);
+  if info.is_none() {
+    return;
+  }
+
+  unsafe { ALLOC.dealloc(ptr, info.unwrap()) };
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn realloc(ptr: *mut u8, size: usize) -> *mut u8 {
-  _ = ptr;
-  _ = size;
-  ptr::null_mut()
+  if BaseAlloc::is_invalid(ptr) {
+    return malloc(size);
+  }
+
+  if size == 0 {
+    free(ptr);
+    return BaseAlloc::sentinel();
+  }
+
+  let info = BaseAlloc::info(ptr);
+  if info.is_none() {
+    return ptr::null_mut();
+  }
+
+  let old_layout = info.unwrap();
+  let new_layout = match Layout::from_size_align(size, old_layout.align()) {
+    Ok(l) => l,
+    Err(_) => return ptr::null_mut(),
+  };
+
+  let new_ptr = unsafe { ALLOC.alloc(new_layout) };
+  if new_ptr.is_null() {
+    return new_ptr;
+  }
+
+  let copy_size = core::cmp::min(old_layout.size(), new_layout.size());
+  unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, copy_size) };
+  unsafe { ALLOC.dealloc(ptr, old_layout) };
+  new_ptr
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn calloc(num: usize, size: usize) -> *mut u8 {
-  _ = num;
-  _ = size;
-  ptr::null_mut()
+  let total_size = num.checked_mul(size);
+  if total_size.is_none() {
+    return ptr::null_mut();
+  }
+
+  let total_size = total_size.unwrap();
+  if total_size == 0 {
+    return BaseAlloc::sentinel();
+  }
+  let layout = Layout::from_size_align(total_size, 1).ok();
+  if layout.is_none() {
+    return ptr::null_mut();
+  }
+
+  let layout = layout.unwrap();
+  let ptr = unsafe { ALLOC.alloc(layout) };
+  if ptr.is_null() {
+    return ptr;
+  }
+
+  unsafe { ptr::write_bytes(ptr, 0, total_size) };
+  ptr
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn aligned_alloc(align: usize, size: usize) -> *mut u8 {
-  _ = align;
-  _ = size;
-  ptr::null_mut()
+  if size == 0 {
+    return BaseAlloc::sentinel();
+  }
+
+  let layout = Layout::from_size_align(size, align).ok();
+  if layout.is_none() {
+    return ptr::null_mut();
+  }
+
+  let layout = layout.unwrap();
+  unsafe { ALLOC.alloc(layout) }
 }

@@ -1,10 +1,9 @@
 #include <stddef.h>
 #include <stdio.h>
-
-extern size_t ba_page_size();
+#include <stdlib.h>
 
 int main() {
-  size_t page_size = ba_page_size();
-  printf("Page size: %zu\n", page_size);
+
+  void *ptr = realloc((void *)0x123, 256);
   return 0;
 }
