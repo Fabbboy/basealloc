@@ -1,3 +1,5 @@
+use std::sync::OnceLock;
+
 use basealloc_sys::prelude::*;
 
 use crate::config::{
@@ -16,40 +18,22 @@ const fn log2c(mut x: usize) -> usize {
 }
 
 #[derive(Clone)]
-pub struct SizeClass(usize);
+pub struct SizeClass {
+  size: usize,
+  pages: usize,
+}
 
 #[derive(Clone)]
 pub struct SizeClassIndex(usize);
 
-static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
+static CLASSES: OnceLock<[SizeClass; NSCLASSES]> = OnceLock::new();
 
-const fn generate_classes() -> [SizeClass; NSCLASSES] {
+fn generate_classes() -> [SizeClass; NSCLASSES] {
   todo!()
 }
 
-fn gcd(mut a: usize, mut b: usize) -> usize {
-  while b != 0 {
-    let t = b;
-    b = a % b;
-    a = t;
-  }
-  a
-}
-pub fn num_pages(class: SizeClassIndex) -> usize {
-  let ps = page_size();
-  let reg_size = CLASSES[class.0].0;
-  let g = gcd(reg_size, ps);
-  reg_size / g
-}
-
-pub fn slab_size(class: SizeClassIndex) -> usize {
-  let ps = page_size();
-  let np = num_pages(class.clone());
-  ps * np
-}
-
-pub fn num_regions(class: SizeClassIndex) -> usize {
-  slab_size(class.clone()) / CLASSES[class.0].0
+fn ensure_classes() -> &'static [SizeClass; NSCLASSES] {
+  CLASSES.get_or_init(|| generate_classes())
 }
 
 pub fn class_for(size: usize) -> Option<SizeClassIndex> {
