@@ -88,10 +88,10 @@ pub unsafe fn aquire_this_arena() -> Option<NonNull<Arena>> {
   THREAD_ARENA.with(|ta| {
     let ptr = ta.load(Ordering::Acquire);
     if ptr.is_null() {
-      None
-    } else {
-      Some(unsafe { NonNull::new_unchecked(ptr) })
+      return None;
     }
+
+    Some(unsafe { NonNull::new_unchecked(ptr) })
   })
 }
 
