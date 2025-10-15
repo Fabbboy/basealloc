@@ -11,5 +11,4 @@ basealloc-rtree = { workspace = true }
 basealloc-bitmap = { workspace = true }
 
 spin = { workspace = true }
-heapless = { workspace = true }
 getset = { workspace = true }

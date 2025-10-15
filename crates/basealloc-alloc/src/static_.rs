@@ -14,7 +14,6 @@ use basealloc_bitmap::{
 use basealloc_rtree::RTree;
 use basealloc_sys::extent::Extent;
 use getset::Getters;
-use heapless::Vec;
 
 use crate::{
   arena::{
@@ -40,7 +39,7 @@ thread_local! {
 #[derive(Getters)]
 struct Static {
   #[getset(get = "pub")]
-  arenas: Vec<AtomicPtr<Arena>, { MAX_ARENAS }>,
+  arenas: [AtomicPtr<Arena>; MAX_ARENAS],
   #[getset(get = "pub")]
   bitmap: Bitmap<'static>,
 }
@@ -48,12 +47,8 @@ struct Static {
 impl Static {
   pub fn new(store: &'static [BitmapWord]) -> Self {
     let bitmap = Bitmap::zero(store, ARENA_BMS).unwrap();
-    let mut arenas = Vec::new();
-    let mut i = 0;
-    while i < MAX_ARENAS {
-      arenas.push(AtomicPtr::new(core::ptr::null_mut())).unwrap();
-      i += 1;
-    }
+    let arenas: [AtomicPtr<Arena>; MAX_ARENAS] =
+      core::array::from_fn(|_| AtomicPtr::new(core::ptr::null_mut()));
 
     Self { arenas, bitmap }
   }
