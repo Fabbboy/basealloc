@@ -1,7 +1,7 @@
 #![no_std]
 
 pub mod arena;
-mod emap;
+pub mod static_;
 
 mod config {
   use basealloc_sys::prim::word_width;
