@@ -1,10 +1,16 @@
-use core::ptr::NonNull;
+use core::{ptr::NonNull, sync::atomic::AtomicPtr};
 
 use basealloc_fixed::bump::{
   Bump,
   BumpError,
 };
+use heapless::Vec;
 use spin::Mutex;
+
+use crate::config::MAX_ARENAS;
+
+pub static ARENAS: Vec<AtomicPtr<Arena>, { MAX_ARENAS }> = Vec::new();
+
 
 #[derive(Debug)]
 pub enum ArenaError {
