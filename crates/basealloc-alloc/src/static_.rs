@@ -62,7 +62,7 @@ static STATIC: LazyLock<Static> = LazyLock::new(|| {
   s
 });
 
-pub static EMAP: RTree<Extent, FANOUT> = RTree::new(CHUNK_SIZE);
+pub static EMAP: RTree<AtomicPtr<Extent>, FANOUT> = RTree::new(CHUNK_SIZE);
 
 fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
   let static_ = &*STATIC;

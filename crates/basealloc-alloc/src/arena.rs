@@ -1,4 +1,7 @@
-use core::ptr::NonNull;
+use core::{
+  mem::MaybeUninit,
+  ptr::NonNull,
+};
 
 use basealloc_fixed::bump::{
   Bump,
@@ -6,6 +9,11 @@ use basealloc_fixed::bump::{
 };
 use getset::CloneGetters;
 use spin::Mutex;
+
+use crate::{
+  bin::Bin,
+  classes::NSCLASSES,
+};
 
 #[derive(Debug)]
 pub enum ArenaError {
@@ -18,21 +26,26 @@ pub type ArenaResult<T> = Result<T, ArenaError>;
 pub struct Arena {
   #[getset(get_clone = "pub")]
   index: usize,
-  _bump: Bump,
+  bins: [Bin; NSCLASSES],
+  bump: Bump,
   _lock: Mutex<()>,
 }
 
 impl Arena {
   pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
-    let this = bump.create::<Self>().map_err(ArenaError::Bump)?;
-    let tmp = Self {
-      index,
-      _bump: bump,
-      _lock: Mutex::new(()),
-    };
-    unsafe { this.write(tmp) };
-    Ok(unsafe { NonNull::new_unchecked(this) })
+    let this_uninit = bump
+      .create::<Self>()
+      .map_err(ArenaError::Bump)?;
+
+    unsafe { core::ptr::addr_of_mut!((*this_uninit).index).write(index) };
+    unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
+    unsafe { core::ptr::addr_of_mut!((*this_uninit)._lock).write(Mutex::new(())) };
+
+    let bins = core::array::from_fn(|_| Bin::new(unsafe { &mut (*this_uninit).bump }));
+    unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
+
+    Ok(unsafe { NonNull::new_unchecked(this_uninit) })
   }
 }
 
@@ -42,7 +55,7 @@ mod tests {
 
   use crate::static_::CHUNK_SIZE;
 
-use super::*; 
+  use super::*;
 
   #[test]
   fn test_arena_creation() {
