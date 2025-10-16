@@ -46,6 +46,7 @@ dependencies = [
  "basealloc-bitmap",
  "basealloc-fixed",
  "basealloc-list",
+ "basealloc-rbtree",
  "basealloc-rtree",
  "basealloc-sync",
  "basealloc-sys",
@@ -99,6 +100,8 @@ dependencies = [
 name = "basealloc-sys"
 version = "0.1.0"
 dependencies = [
+ "basealloc-list",
+ "basealloc-rbtree",
  "libc",
 ]
 

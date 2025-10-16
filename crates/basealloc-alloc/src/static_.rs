@@ -8,6 +8,7 @@ use basealloc_bitmap::{
   Bitmap,
   BitmapWord,
 };
+use basealloc_rbtree::RBTree;
 use basealloc_rtree::RTree;
 use basealloc_sync::LazyLock;
 use basealloc_sys::extent::Extent;

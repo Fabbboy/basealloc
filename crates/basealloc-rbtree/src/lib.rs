@@ -9,7 +9,14 @@ use getset::{
   MutGetters,
 };
 
-pub trait HasNode {}
+pub trait HasNode {
+  fn node(&self) -> &RBNode<Self>
+  where
+    Self: Sized;
+  fn node_mut(&mut self) -> &mut RBNode<Self>
+  where
+    Self: Sized;
+}
 
 pub enum Color {
   Red,
@@ -31,12 +38,27 @@ where
   color: Color,
 }
 
+impl<T> Default for RBNode<T>
+where
+  T: HasNode,
+{
+  fn default() -> Self {
+    Self {
+      parent: None,
+      left: None,
+      right: None,
+      color: Color::Red,
+    }
+  }
+}
+
 pub struct RBTree<T, F>
 where
   T: HasNode,
   F: Fn(&T, &T) -> Ordering,
 {
   root: Option<NonNull<T>>,
+  bump: Bump,
   cmp: F,
 }
 
@@ -46,6 +68,10 @@ where
   F: Fn(&T, &T) -> Ordering,
 {
   pub const fn new(cmp: F) -> Self {
-    Self { root: None, cmp }
+    Self {
+      root: None,
+      bump: Bump::new(),
+      cmp,
+    }
   }
 }

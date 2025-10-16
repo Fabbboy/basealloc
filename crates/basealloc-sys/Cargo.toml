@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 libc = { workspace = true }
+
+basealloc-list = { workspace = true }
+basealloc-rbtree = { workspace = true }

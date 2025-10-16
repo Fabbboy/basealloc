@@ -1,4 +1,20 @@
-use core::ops::Range;
+use core::{
+  cmp,
+  ops::Range,
+  sync::atomic::{
+    AtomicBool,
+    Ordering,
+  },
+};
+
+use basealloc_list::{
+  HasLink,
+  Link,
+};
+use basealloc_rbtree::{
+  HasNode,
+  RBNode,
+};
 
 use crate::{
   GLOBAL_SYSTEM,
@@ -12,19 +28,51 @@ use crate::{
 pub enum ExtentError {
   SystemError(SysError),
   OutOfBounds,
+  NonOwning,
 }
 
 pub type ExtentResult<T> = Result<T, ExtentError>;
 
 pub struct Extent {
   slice: &'static mut [u8],
+  owning: AtomicBool,
+  node: RBNode<Extent>,
+  link: Link<Extent>,
 }
 
 impl Extent {
   pub fn new(size: usize, options: SysOption) -> ExtentResult<Extent> {
     let slice = unsafe { GLOBAL_SYSTEM.alloc(size, options) }.map_err(ExtentError::SystemError)?;
 
-    Ok(Extent { slice })
+    Ok(Extent {
+      slice,
+      owning: AtomicBool::new(true),
+      node: RBNode::default(),
+      link: Link::default(),
+    })
+  }
+
+  pub fn is_owning(&self) -> bool {
+    self.owning.load(Ordering::Acquire)
+  }
+
+  // Other considerations:
+  // - giveup
+  // - handover
+  // - die_and_inherit
+  // - capitulate
+  // - relinquish
+  // - abdicate
+  // - takeover
+  // - invasion
+  pub fn giveup(mut self, other: &mut Extent) -> ExtentResult<()> {
+    if !self.is_owning() {
+      return Err(ExtentError::NonOwning);
+    }
+
+    core::mem::swap(&mut self.slice, &mut other.slice);
+    self.owning.store(false, Ordering::Release);
+    Ok(())
   }
 
   pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
@@ -34,12 +82,13 @@ impl Extent {
     Ok(())
   }
 
-  /*
-  // Partially modifying should not be a ting too hard to maintain
-   pub fn modify(&mut self, range: Range<usize>, options: SysOption) -> ExtentResult<()> {
-    self.check(range.clone())?;
-    unsafe { GLOBAL_SYSTEM.modify(&self.slice[range], options) }.map_err(ExtentError::SystemError)
-  }*/
+  #[inline(always)]
+  pub fn ord(one: &Extent, other: &Extent) -> cmp::Ordering {
+    let one_len = one.slice.len();
+    let other_len = other.slice.len();
+
+    one_len.cmp(&other_len)
+  }
 }
 
 impl AsRef<[u8]> for Extent {
@@ -57,6 +106,26 @@ impl AsMut<[u8]> for Extent {
 impl Drop for Extent {
   fn drop(&mut self) {
     let _ = unsafe { GLOBAL_SYSTEM.dealloc(self.slice) };
+  }
+}
+
+impl HasLink for Extent {
+  fn link(&self) -> &Link<Self> {
+    &self.link
+  }
+
+  fn link_mut(&mut self) -> &mut Link<Self> {
+    &mut self.link
+  }
+}
+
+impl HasNode for Extent {
+  fn node(&self) -> &RBNode<Self> {
+    &self.node
+  }
+
+  fn node_mut(&mut self) -> &mut RBNode<Self> {
+    &mut self.node
   }
 }
 

@@ -4,6 +4,7 @@ pub mod arena;
 pub mod bin;
 pub mod classes;
 pub mod static_;
+pub mod tcache;
 
 const WORD: usize = word_width();
 const BITS_PER_BYTE: usize = 8;

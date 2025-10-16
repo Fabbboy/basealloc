@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 getset = { workspace = true }
+
+basealloc-fixed = { workspace = true }
