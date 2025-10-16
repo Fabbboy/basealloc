@@ -7,6 +7,9 @@ edition = "2024"
 basealloc-alloc = { workspace = true }
 libc = { workspace = true, optional = true }
 
+[dev-dependencies]
+criterion = "0.7.0"
+
 [profile.dev]
 panic = "abort"
 
@@ -39,3 +42,7 @@ basealloc-rtree = { path = "crates/basealloc-rtree" }
 basealloc-bitmap = { path = "crates/basealloc-bitmap" }
 basealloc-alloc = { path = "crates/basealloc-alloc" }
 basealloc = { path = "." }
+
+[[bench]]
+name = "bench_classes"
+harness = false
