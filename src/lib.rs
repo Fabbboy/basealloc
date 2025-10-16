@@ -27,7 +27,7 @@ static FALLBACK: LazyLock<AtomicPtr<Arena>> =
 pub struct BaseAlloc {}
 
 impl BaseAlloc {
-  pub fn sizeof(ptr: *mut u8) -> Option<usize> {
+  pub unsafe fn sizeof(ptr: *mut u8) -> Option<usize> {
     if Self::is_invalid(ptr) {
       return None;
     }

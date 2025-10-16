@@ -34,7 +34,7 @@ pub extern "C" fn free(ptr: *mut u8) {
     return;
   }
 
-  let sizeof = BaseAlloc::sizeof(ptr);
+  let sizeof = unsafe { BaseAlloc::sizeof(ptr) };
   if sizeof.is_none() {
     return;
   }
@@ -54,7 +54,7 @@ pub extern "C" fn realloc(ptr: *mut u8, size: usize) -> *mut u8 {
     return BaseAlloc::sentinel();
   }
 
-  let old_size = BaseAlloc::sizeof(ptr);
+  let old_size = unsafe { BaseAlloc::sizeof(ptr) };
   if old_size.is_none() {
     return ptr::null_mut();
   }
@@ -123,7 +123,7 @@ pub extern "C" fn malloc_usable_size(ptr: *mut u8) -> usize {
     return 0;
   }
 
-  let sizeof = BaseAlloc::sizeof(ptr);
+  let sizeof = unsafe { BaseAlloc::sizeof(ptr) };
   if sizeof.is_none() {
     return 0;
   }
