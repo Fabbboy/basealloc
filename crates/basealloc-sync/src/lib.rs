@@ -77,5 +77,15 @@ where
   }
 }
 
-unsafe impl<T, F> Sync for LazyLock<T, F> where T: Sync, F: Send + FnOnce() -> T {}
-unsafe impl<T, F> Send for LazyLock<T, F> where T: Send, F: Send + FnOnce() -> T {}
+unsafe impl<T, F> Sync for LazyLock<T, F>
+where
+  T: Sync,
+  F: Send + FnOnce() -> T,
+{
+}
+unsafe impl<T, F> Send for LazyLock<T, F>
+where
+  T: Send,
+  F: Send + FnOnce() -> T,
+{
+}
