@@ -120,7 +120,7 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
   let mut i = 0;
   while i < table.len() {
     let size = (i + 1) << LOOKUP_SHIFT;
-    let idx = (size + QUANTUM - 1) / QUANTUM - 1;
+    let idx = size.div_ceil(QUANTUM) - 1;
     table[i] = idx as u8;
     i += 1;
   }

@@ -95,11 +95,11 @@ impl Drop for Extent {
 
 impl HasLink for Extent {
   fn link(&self) -> &Link<Self> {
-    &*self.link
+    &self.link
   }
 
   fn link_mut(&mut self) -> &mut Link<Self> {
-    &mut *self.link
+    &mut self.link
   }
 }
 

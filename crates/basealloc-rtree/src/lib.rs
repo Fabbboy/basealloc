@@ -77,7 +77,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
   }
 
   const fn levels() -> usize {
-    (va_size() + Self::BPL - 1) / Self::BPL
+    va_size().div_ceil(Self::BPL)
   }
 
   fn new_node(&mut self, value: Option<T>) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {

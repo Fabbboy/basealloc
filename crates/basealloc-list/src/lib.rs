@@ -90,7 +90,11 @@ impl List {
     let prev_ptr = at_link.prev();
     item_link.set_prev(prev_ptr);
 
-    prev_ptr.map(|prev| unsafe { prev.as_ref().link().set_next(Some(item_ptr)) });
+    if let Some(prev) = prev_ptr {
+      unsafe {
+        prev.as_ref().link().set_next(Some(item_ptr));
+      }
+    }
 
     at_link.set_prev(Some(item_ptr));
   }
@@ -110,7 +114,11 @@ impl List {
     let next_ptr = at_link.next();
     item_link.set_next(next_ptr);
 
-    next_ptr.map(|next| unsafe { next.as_ref().link().set_prev(Some(item_ptr)) });
+    if let Some(next) = next_ptr {
+      unsafe {
+        next.as_ref().link().set_prev(Some(item_ptr));
+      }
+    }
 
     at_link.set_next(Some(item_ptr));
   }
@@ -124,9 +132,17 @@ impl List {
     let prev_ptr = item_link.prev();
     let next_ptr = item_link.next();
 
-    prev_ptr.map(|prev| unsafe { prev.as_ref().link().set_next(next_ptr) });
+    if let Some(prev) = prev_ptr {
+      unsafe {
+        prev.as_ref().link().set_next(next_ptr);
+      }
+    }
 
-    next_ptr.map(|next| unsafe { next.as_ref().link().set_prev(prev_ptr) });
+    if let Some(next) = next_ptr {
+      unsafe {
+        next.as_ref().link().set_prev(prev_ptr);
+      }
+    }
 
     item_link.set_next(None);
     item_link.set_prev(None);
