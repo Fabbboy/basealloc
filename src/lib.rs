@@ -1,13 +1,26 @@
-#![cfg_attr(not(feature = "std"), no_std)]
 use core::{
   alloc::{
     GlobalAlloc,
     Layout,
   },
   ptr::NonNull,
+  sync::atomic::{
+    AtomicPtr,
+    Ordering,
+  },
+};
+use std::sync::LazyLock;
+
+use basealloc_alloc::{
+  arena::Arena,
+  static_::{
+    CHUNK_SIZE,
+    acquire_this_arena,
+  },
 };
 
-use basealloc_alloc::static_::acquire_this_arena;
+static FALLBACK: LazyLock<AtomicPtr<Arena>> =
+  LazyLock::new(|| AtomicPtr::new(unsafe { Arena::new(usize::MAX, CHUNK_SIZE).unwrap().as_ptr() }));
 
 pub struct BaseAlloc {}
 
@@ -43,7 +56,17 @@ unsafe impl GlobalAlloc for BaseAlloc {
       }
     }
 
-    todo!("no fallback yet");
+    let fallback = FALLBACK.load(Ordering::Acquire);
+    if fallback.is_null() {
+      return core::ptr::null_mut();
+    }
+
+    let arena = unsafe { &mut *fallback };
+    if let Ok(ptr) = arena.allocate(layout) {
+      return ptr.as_ptr();
+    }
+
+    core::ptr::null_mut()
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {

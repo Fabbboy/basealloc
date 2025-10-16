@@ -34,6 +34,7 @@ name = "basealloc"
 version = "0.1.0"
 dependencies = [
  "basealloc-alloc",
+ "basealloc-sync",
  "criterion",
  "libc",
 ]
@@ -78,6 +79,10 @@ dependencies = [
  "basealloc-sys",
  "getset",
 ]
+
+[[package]]
+name = "basealloc-sync"
+version = "0.1.0"
 
 [[package]]
 name = "basealloc-sys"

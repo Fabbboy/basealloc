@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 basealloc-alloc = { workspace = true }
 libc = { workspace = true, optional = true }
+basealloc-sync = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.7.0"
@@ -27,6 +28,7 @@ members = [
   "crates/basealloc-sys",
   "crates/basealloc-bitmap",
   "ffi",
+  "crates/basealloc-sync",
 ]
 resolver = "3"
 
@@ -34,6 +36,7 @@ resolver = "3"
 libc = "0.2.176"
 getset = "0.1.6"
 spin = "0.10.0"
+windows-sys = "0.61.2"
 
 basealloc-sys = { path = "crates/basealloc-sys" }
 basealloc-list = { path = "crates/basealloc-list" }
@@ -41,6 +44,7 @@ basealloc-fixed = { path = "crates/basealloc-fixed" }
 basealloc-rtree = { path = "crates/basealloc-rtree" }
 basealloc-bitmap = { path = "crates/basealloc-bitmap" }
 basealloc-alloc = { path = "crates/basealloc-alloc" }
+basealloc-sync = { path = "crates/basealloc-sync" }
 basealloc = { path = "." }
 
 [[bench]]
