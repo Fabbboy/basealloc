@@ -6,9 +6,11 @@ use core::{
     NonNull,
     drop_in_place,
   },
-  sync::atomic::{AtomicPtr, Ordering},
+  sync::atomic::{
+    AtomicPtr,
+    Ordering,
+  },
 };
-
 
 pub trait HasLink {
   fn link(&self) -> &Link<Self>
@@ -35,16 +37,16 @@ where
   pub fn next(&self) -> Option<NonNull<T>> {
     NonNull::new(self.next.load(Ordering::Acquire))
   }
-  
+
   pub fn prev(&self) -> Option<NonNull<T>> {
     NonNull::new(self.prev.load(Ordering::Acquire))
   }
-  
+
   pub fn set_next(&self, ptr: Option<NonNull<T>>) {
     let raw = ptr.map_or(core::ptr::null_mut(), |p| p.as_ptr());
     self.next.store(raw, Ordering::Release);
   }
-  
+
   pub fn set_prev(&self, ptr: Option<NonNull<T>>) {
     let raw = ptr.map_or(core::ptr::null_mut(), |p| p.as_ptr());
     self.prev.store(raw, Ordering::Release);
@@ -84,14 +86,12 @@ impl List {
     let at_link = at.link();
 
     item_link.set_next(Some(at_ptr));
-    
+
     let prev_ptr = at_link.prev();
     item_link.set_prev(prev_ptr);
-    
-    prev_ptr.map(|prev| unsafe {
-      prev.as_ref().link().set_next(Some(item_ptr))
-    });
-    
+
+    prev_ptr.map(|prev| unsafe { prev.as_ref().link().set_next(Some(item_ptr)) });
+
     at_link.set_prev(Some(item_ptr));
   }
 
@@ -106,14 +106,12 @@ impl List {
     let at_link = at.link();
 
     item_link.set_prev(Some(at_ptr));
-    
+
     let next_ptr = at_link.next();
     item_link.set_next(next_ptr);
-    
-    next_ptr.map(|next| unsafe {
-      next.as_ref().link().set_prev(Some(item_ptr))
-    });
-    
+
+    next_ptr.map(|next| unsafe { next.as_ref().link().set_prev(Some(item_ptr)) });
+
     at_link.set_next(Some(item_ptr));
   }
 
@@ -126,13 +124,9 @@ impl List {
     let prev_ptr = item_link.prev();
     let next_ptr = item_link.next();
 
-    prev_ptr.map(|prev| unsafe {
-      prev.as_ref().link().set_next(next_ptr)
-    });
+    prev_ptr.map(|prev| unsafe { prev.as_ref().link().set_next(next_ptr) });
 
-    next_ptr.map(|next| unsafe {
-      next.as_ref().link().set_prev(prev_ptr)
-    });
+    next_ptr.map(|next| unsafe { next.as_ref().link().set_prev(prev_ptr) });
 
     item_link.set_next(None);
     item_link.set_prev(None);

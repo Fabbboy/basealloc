@@ -1,6 +1,10 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use core::hint::black_box;
 use basealloc_rtree::RTree;
+use core::hint::black_box;
+use criterion::{
+  Criterion,
+  criterion_group,
+  criterion_main,
+};
 
 type BenchTree = RTree<usize, 16>;
 

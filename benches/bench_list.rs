@@ -1,6 +1,10 @@
-use criterion::{criterion_group, criterion_main, Criterion};
-use core::hint::black_box;
 use basealloc_list::prelude::*;
+use core::hint::black_box;
+use criterion::{
+  Criterion,
+  criterion_group,
+  criterion_main,
+};
 
 #[derive(Debug)]
 struct BenchNode {
@@ -31,12 +35,12 @@ fn bench_list_operations(c: &mut Criterion) {
   c.bench_function("list_insert_after", |b| {
     b.iter(|| {
       let mut nodes: Vec<BenchNode> = (0..100).map(BenchNode::new).collect();
-      
+
       for i in 1..nodes.len() {
         let (left, right) = nodes.split_at_mut(i);
         List::insert_after(&mut right[0], &mut left[0]);
       }
-      
+
       black_box(&nodes);
     });
   });
@@ -47,7 +51,7 @@ fn bench_list_operations(c: &mut Criterion) {
         let mut nodes: Vec<BenchNode> = (0..100).map(BenchNode::new).collect();
         for i in 1..nodes.len() {
           let (left, right) = nodes.split_at_mut(i);
-          List::insert_after(&mut right[0], &mut left[i-1]);
+          List::insert_after(&mut right[0], &mut left[i - 1]);
         }
         nodes
       },
@@ -67,7 +71,7 @@ fn bench_list_operations(c: &mut Criterion) {
         let mut nodes: Vec<BenchNode> = (0..100).map(BenchNode::new).collect();
         for i in 1..nodes.len() {
           let (left, right) = nodes.split_at_mut(i);
-          List::insert_after(&mut right[0], &mut left[i-1]);
+          List::insert_after(&mut right[0], &mut left[i - 1]);
         }
         nodes
       },

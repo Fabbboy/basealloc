@@ -184,7 +184,10 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
     let mut new_child = self.new_node(None)?;
     unsafe {
-      new_child.as_mut().parent.store(parent.as_ptr(), Ordering::Release);
+      new_child
+        .as_mut()
+        .parent
+        .store(parent.as_ptr(), Ordering::Release);
       parent.as_mut().set_child(idx, new_child);
     }
 
@@ -195,7 +198,11 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     loop {
       let should_remove = {
         let n = unsafe { node.as_ref() };
-        n.value.is_none() && n.children.iter().all(|child| child.load(Ordering::Acquire).is_null())
+        n.value.is_none()
+          && n
+            .children
+            .iter()
+            .all(|child| child.load(Ordering::Acquire).is_null())
       };
 
       if !should_remove {
@@ -214,7 +221,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
           node = parent_node_ptr;
         },
       );
-      
+
       if parent_raw.is_null() {
         break;
       }
