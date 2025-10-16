@@ -36,7 +36,7 @@ pub struct Arena {
   index: usize,
   bins: [Bin; NSCLASSES],
   bump: Bump,
-  _lock: Mutex<()>,
+  lock: Mutex<()>,
 }
 
 impl Arena {
@@ -46,7 +46,7 @@ impl Arena {
 
     unsafe { core::ptr::addr_of_mut!((*this_uninit).index).write(index) };
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
-    unsafe { core::ptr::addr_of_mut!((*this_uninit)._lock).write(Mutex::new(())) };
+    unsafe { core::ptr::addr_of_mut!((*this_uninit).lock).write(Mutex::new(())) };
 
     let bump = unsafe { &mut *core::ptr::addr_of_mut!((*this_uninit).bump) };
     let bins = core::array::from_fn(|i| {
@@ -64,7 +64,7 @@ impl Arena {
   }
 
   pub fn allocate(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
-    let _guard = self._lock.lock();
+    let _guard = self.lock.lock();
     let class = class_for(layout.size());
     if let None = class {
       return self.allocate_large(layout);
