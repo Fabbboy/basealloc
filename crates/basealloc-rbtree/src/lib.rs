@@ -1,7 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 use core::{
   cmp::Ordering,
-  ptr::NonNull,
   sync::atomic::AtomicPtr,
 };
 

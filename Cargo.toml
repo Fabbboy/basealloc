@@ -10,6 +10,9 @@ basealloc-sync = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.7.0"
+basealloc-alloc = { workspace = true }
+basealloc-list = { workspace = true }
+basealloc-rtree = { workspace = true }
 
 [profile.dev]
 panic = "abort"
@@ -53,4 +56,12 @@ basealloc = { path = "." }
 
 [[bench]]
 name = "bench_classes"
+harness = false
+
+[[bench]]
+name = "bench_list"
+harness = false
+
+[[bench]]
+name = "bench_radix"
 harness = false
