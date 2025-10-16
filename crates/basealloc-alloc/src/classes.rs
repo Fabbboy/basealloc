@@ -1,11 +1,17 @@
 use std::sync::OnceLock;
 
-use basealloc_sys::prelude::*;
-use basealloc_sys::prim::{likely, unlikely};
+use basealloc_sys::{
+  prelude::*,
+  prim::{
+    likely,
+    unlikely,
+  },
+};
 
 use crate::{
   WORD,
-  WORD_BITS, WORD_TRAILING,
+  WORD_BITS,
+  WORD_TRAILING,
 };
 
 pub const QUANTUM: usize = WORD * 2;
@@ -35,10 +41,10 @@ const LOOKUP_SHIFT: usize = WORD_TRAILING + 1;
 // - SCLASS_CUTOFF = 2^MAX_REGULAR ≈ 2MB: maximum size handled by size classes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SizeClass(usize);
+pub struct SizeClass(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SizeClassIndex(usize);
+pub struct SizeClassIndex(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PageSize(usize);
@@ -46,7 +52,6 @@ pub struct PageSize(usize);
 static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
 static TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
 static PAGES: OnceLock<[PageSize; NSCLASSES]> = OnceLock::new();
-
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -177,7 +182,14 @@ mod tests {
     for i in 1..NSCLASSES {
       let SizeClass(prev) = CLASSES[i - 1];
       let SizeClass(curr) = CLASSES[i];
-      assert!(curr > prev, "class[{}]={} not > class[{}]={}", i, curr, i - 1, prev);
+      assert!(
+        curr > prev,
+        "class[{}]={} not > class[{}]={}",
+        i,
+        curr,
+        i - 1,
+        prev
+      );
     }
   }
 
@@ -209,12 +221,23 @@ mod tests {
     for idx in 0..NSCLASSES {
       let SizeClass(size) = CLASSES[idx];
       let result = class_for(size);
-      assert!(result.is_some(), "size {} (class {}) should have a class", size, idx);
+      assert!(
+        result.is_some(),
+        "size {} (class {}) should have a class",
+        size,
+        idx
+      );
 
       if idx > 0 {
         let SizeClass(prev_size) = CLASSES[idx - 1];
         let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
-        assert_eq!(found_idx, idx, "size {} should map to class {}", prev_size + 1, idx);
+        assert_eq!(
+          found_idx,
+          idx,
+          "size {} should map to class {}",
+          prev_size + 1,
+          idx
+        );
       }
     }
   }
@@ -235,7 +258,13 @@ mod tests {
     for (i, page) in pages.iter().enumerate() {
       let PageSize(page_bytes) = *page;
       assert!(page_bytes > 0, "page size for class {} is zero", i);
-      assert_eq!(page_bytes % ps, 0, "page size {} not multiple of page_size {}", page_bytes, ps);
+      assert_eq!(
+        page_bytes % ps,
+        0,
+        "page size {} not multiple of page_size {}",
+        page_bytes,
+        ps
+      );
     }
   }
 
@@ -248,10 +277,22 @@ mod tests {
       let PageSize(page_bytes) = *page;
 
       let objects_per_page = page_bytes / class_size;
-      assert!(objects_per_page > 0, "class {} size {} too large for page {}", i, class_size, page_bytes);
+      assert!(
+        objects_per_page > 0,
+        "class {} size {} too large for page {}",
+        i,
+        class_size,
+        page_bytes
+      );
 
       let waste = page_bytes - (objects_per_page * class_size);
-      assert!(waste < class_size, "waste {} >= class_size {} for class {}", waste, class_size, i);
+      assert!(
+        waste < class_size,
+        "waste {} >= class_size {} for class {}",
+        waste,
+        class_size,
+        i
+      );
     }
   }
 }

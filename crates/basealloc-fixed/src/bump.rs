@@ -130,8 +130,9 @@ impl Bump {
 
   fn obtain_chunk(&self, layout: Layout) -> BumpResult<NonNull<Chunk>> {
     let header = Chunk::data_offset()?;
-    let aligned = align_up(layout.size(), layout.align()).ok_or(ChunkError::Overflow)?;
-    let required = header.checked_add(aligned).ok_or(ChunkError::Overflow)?;
+    let required = header
+      .checked_add(layout.size())
+      .ok_or(ChunkError::Overflow)?;
     let chunk_size = cmp::max(self.chunk_size, required);
     let chunk_size = page_align(chunk_size).map_err(ChunkError::PrimError)?;
     Chunk::new(chunk_size)

@@ -39,9 +39,7 @@ impl Fixed {
   }
 
   fn required(&self, layout: Layout) -> FixedResult<usize> {
-    let align = layout.align();
-    let size = layout.size();
-    align_up(size, align).ok_or(FixedError::Invalid)
+    Ok(layout.size())
   }
 
   fn start_offset(&self, slice_ptr: usize, current: usize, align: usize) -> FixedResult<usize> {

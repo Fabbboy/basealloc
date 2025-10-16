@@ -1,6 +1,4 @@
-use basealloc_alloc::classes::
-  class_for
-;
+use basealloc_alloc::classes::class_for;
 use criterion::{
   BenchmarkId,
   Criterion,

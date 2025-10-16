@@ -1,6 +1,7 @@
-use core::
-  ptr::NonNull
-;
+use core::{
+  alloc::Layout,
+  ptr::NonNull,
+};
 
 use basealloc_fixed::bump::{
   Bump,
@@ -10,13 +11,21 @@ use getset::CloneGetters;
 use spin::Mutex;
 
 use crate::{
-  bin::Bin,
-  classes::NSCLASSES,
+  bin::{
+    Bin,
+    BinError,
+  },
+  classes::{
+    NSCLASSES,
+    SizeClass,
+    class_for,
+  },
 };
 
 #[derive(Debug)]
 pub enum ArenaError {
-  Bump(BumpError),
+  BumpError(BumpError),
+  BinError(BinError),
 }
 
 pub type ArenaResult<T> = Result<T, ArenaError>;
@@ -33,18 +42,37 @@ pub struct Arena {
 impl Arena {
   pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
-    let this_uninit = bump
-      .create::<Self>()
-      .map_err(ArenaError::Bump)?;
+    let this_uninit = bump.create::<Self>().map_err(ArenaError::BumpError)?;
 
     unsafe { core::ptr::addr_of_mut!((*this_uninit).index).write(index) };
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
     unsafe { core::ptr::addr_of_mut!((*this_uninit)._lock).write(Mutex::new(())) };
 
-    let bins = core::array::from_fn(|_| Bin::new(unsafe { &mut (*this_uninit).bump }));
+    let bump = unsafe { &mut *core::ptr::addr_of_mut!((*this_uninit).bump) };
+    let bins = core::array::from_fn(|i| {
+      let class = SizeClass(i);
+      Bin::new(bump, class)
+    });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
 
     Ok(unsafe { NonNull::new_unchecked(this_uninit) })
+  }
+
+  fn allocate_large(&self, layout: Layout) -> ArenaResult<NonNull<u8>> {
+    _ = layout;
+    todo!()
+  }
+
+  pub fn allocate(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
+    let _guard = self._lock.lock();
+    let class = class_for(layout.size());
+    if let None = class {
+      return self.allocate_large(layout);
+    }
+
+    let class = class.unwrap();
+    let bin = &mut self.bins[class.0];
+    bin.allocate(layout).map_err(ArenaError::BinError)
   }
 }
 

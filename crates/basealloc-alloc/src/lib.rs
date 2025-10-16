@@ -7,6 +7,6 @@ pub mod static_;
 
 const WORD: usize = word_width();
 const BITS_PER_BYTE: usize = 8;
-const WORD_BITS: usize = WORD * BITS_PER_BYTE; 
+const WORD_BITS: usize = WORD * BITS_PER_BYTE;
 const WORD_TRAILING: usize = WORD.trailing_zeros() as usize;
 const MAX_ARENAS: usize = 256;

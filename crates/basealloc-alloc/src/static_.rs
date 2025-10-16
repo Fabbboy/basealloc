@@ -16,10 +16,12 @@ use basealloc_sys::extent::Extent;
 use getset::Getters;
 
 use crate::{
+  MAX_ARENAS,
+  WORD_TRAILING,
   arena::{
     Arena,
     ArenaResult,
-  }, MAX_ARENAS, WORD_TRAILING
+  },
 };
 
 pub const ARENA_BMS: usize = core::mem::size_of::<BitmapWord>() * MAX_ARENAS;

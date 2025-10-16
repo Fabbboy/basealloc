@@ -1,7 +1,5 @@
 use core::alloc::Layout;
 
-use basealloc_sys::math::align_up;
-
 use crate::{
   bump::Bump,
   fixed::{
@@ -15,7 +13,7 @@ fn fixed_allocation_alignment() {
   let mut storage = [0u8; 128];
   let mut fixed = Fixed::new(&storage);
   let layout = Layout::from_size_align(24, 16).unwrap();
-  let expected_len = align_up(layout.size(), layout.align()).unwrap();
+  let expected_len = layout.size();
 
   let (first_addr, first_len) = {
     let first = fixed.allocate(&mut storage, layout).unwrap();
@@ -27,7 +25,7 @@ fn fixed_allocation_alignment() {
   };
 
   let second_layout = Layout::from_size_align(8, 8).unwrap();
-  let expected_second_len = align_up(second_layout.size(), second_layout.align()).unwrap();
+  let expected_second_len = second_layout.size();
   let second = fixed.allocate(&mut storage, second_layout).unwrap();
 
   assert_eq!(second.as_ptr() as usize % second_layout.align(), 0);
@@ -58,7 +56,7 @@ fn fixed_reports_oom() {
 fn bump_allocation_alignment() {
   let mut bump = Bump::new(0);
   let layout = Layout::from_size_align(48, 16).unwrap();
-  let expected_len = align_up(layout.size(), layout.align()).unwrap();
+  let expected_len = layout.size();
 
   let slice = bump.allocate(layout).unwrap();
   assert_eq!(slice.as_ptr() as usize % layout.align(), 0);
