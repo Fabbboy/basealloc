@@ -74,6 +74,18 @@ impl Arena {
     let bin = &mut self.bins[class.0];
     bin.allocate(layout).map_err(ArenaError::BinError)
   }
+
+  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    _ = ptr;
+    _ = layout;
+    todo!()
+  }
+
+  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    _ = ptr;
+    _ = layout;
+    todo!()
+  }
 }
 
 #[cfg(test)]

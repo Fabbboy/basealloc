@@ -11,7 +11,6 @@ use core::{
   },
 };
 
-mod handler;
 
 #[global_allocator]
 static ALLOC: BaseAlloc = BaseAlloc {};

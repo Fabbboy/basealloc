@@ -34,7 +34,7 @@ pub const FANOUT: usize = 1 << BITS_PER_LEVEL;
 
 thread_local! {
   pub static THREAD_ARENA: LazyLock<AtomicPtr<Arena>> = LazyLock::new(|| {
-    AtomicPtr::new(aquire_arena().unwrap())
+    AtomicPtr::new(acquire_arena().unwrap())
   });
 
   pub static ARENA_GUARD: ArenaGuard = ArenaGuard;
@@ -73,7 +73,7 @@ fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
   Ok(unsafe { arena.as_mut() })
 }
 
-fn aquire_arena() -> Option<&'static mut Arena> {
+fn acquire_arena() -> Option<&'static mut Arena> {
   let static_ = &*STATIC;
   let idx = static_.bitmap().find_fc()?;
   static_.bitmap().set(idx).ok()?;
@@ -88,15 +88,18 @@ fn aquire_arena() -> Option<&'static mut Arena> {
   create_arena(idx).ok()
 }
 
-pub unsafe fn aquire_this_arena() -> Option<NonNull<Arena>> {
-  THREAD_ARENA.with(|ta| {
-    let ptr = ta.load(Ordering::Acquire);
-    if ptr.is_null() {
-      return None;
-    }
+pub fn acquire_this_arena() -> Option<NonNull<Arena>> {
+  THREAD_ARENA
+    .try_with(|ta| {
+      let ptr = ta.load(Ordering::Acquire);
+      if ptr.is_null() {
+        return None;
+      }
 
-    Some(unsafe { NonNull::new_unchecked(ptr) })
-  })
+      Some(unsafe { NonNull::new_unchecked(ptr) })
+    })
+    .ok()
+    .flatten()
 }
 
 pub unsafe fn release_arena(arena: &'static mut Arena) {
@@ -113,14 +116,16 @@ struct ArenaGuard;
 
 impl Drop for ArenaGuard {
   fn drop(&mut self) {
-    let arena_ptr = unsafe { aquire_this_arena() };
+    let arena_ptr = acquire_this_arena();
     if let None = arena_ptr {
       return;
     }
 
-    THREAD_ARENA.with(|ta| {
-      ta.store(core::ptr::null_mut(), Ordering::Release);
-    });
+    THREAD_ARENA
+      .try_with(|ta| {
+        ta.store(core::ptr::null_mut(), Ordering::Release);
+      })
+      .ok();
 
     let mut arena_ptr = arena_ptr.unwrap();
     let arena = unsafe { arena_ptr.as_mut() };

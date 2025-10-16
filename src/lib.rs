@@ -8,6 +8,8 @@ use core::{
   ptr::NonNull,
 };
 
+use basealloc_alloc::static_::acquire_this_arena;
+
 pub struct BaseAlloc {}
 
 impl BaseAlloc {
@@ -27,12 +29,27 @@ impl BaseAlloc {
 
 unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    _ = layout;
-    core::ptr::null_mut()
+    if let Some(mut arena_ptr) = acquire_this_arena() {
+      let arena = unsafe { arena_ptr.as_mut() };
+      if let Ok(ptr) = arena.allocate(layout) {
+        return ptr.as_ptr();
+      }
+    }
+
+    todo!("no fallback yet");
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-    _ = layout;
-    _ = ptr;
+    if Self::is_invalid(ptr) {
+      return;
+    }
+
+    if let Some(mut arena_ptr) = acquire_this_arena() {
+      let arena = unsafe { arena_ptr.as_mut() };
+      arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
+      return;
+    }
+
+    todo!("no fallback yet");
   }
 }
