@@ -87,6 +87,9 @@ dependencies = [
 [[package]]
 name = "basealloc-sync"
 version = "0.1.0"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "basealloc-sys"

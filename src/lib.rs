@@ -1,3 +1,5 @@
+#![no_std]
+
 use core::{
   alloc::{
     GlobalAlloc,
@@ -9,7 +11,6 @@ use core::{
     Ordering,
   },
 };
-use std::sync::LazyLock;
 
 use basealloc_alloc::{
   arena::Arena,
@@ -18,6 +19,7 @@ use basealloc_alloc::{
     acquire_this_arena,
   },
 };
+use basealloc_sync::LazyLock;
 
 static FALLBACK: LazyLock<AtomicPtr<Arena>> =
   LazyLock::new(|| AtomicPtr::new(unsafe { Arena::new(usize::MAX, CHUNK_SIZE).unwrap().as_ptr() }));
