@@ -4,6 +4,7 @@ use core::{
   ptr::NonNull,
 };
 
+use basealloc_fixed::bump::Bump;
 use getset::{
   Getters,
   MutGetters,
@@ -67,10 +68,10 @@ where
   T: HasNode,
   F: Fn(&T, &T) -> Ordering,
 {
-  pub const fn new(cmp: F) -> Self {
+  pub const fn new(chunk_size: usize, cmp: F) -> Self {
     Self {
       root: None,
-      bump: Bump::new(),
+      bump: Bump::new(chunk_size),
       cmp,
     }
   }
