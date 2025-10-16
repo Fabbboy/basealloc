@@ -72,6 +72,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "basealloc-rbtree"
+version = "0.1.0"
+
+[[package]]
 name = "basealloc-rtree"
 version = "0.1.0"
 dependencies = [
