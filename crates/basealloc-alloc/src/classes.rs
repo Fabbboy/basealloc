@@ -128,10 +128,10 @@ fn class_for_regular(size: usize) -> SizeClassIndex {
   let group_idx = log - FIRST_REGULAR;
   let base = 1 << log;
   let delta = base >> NGROUPSEX;
-  let offset = if size <= base {
-    0
-  } else {
+  let offset = if unlikely(size > base) {
     (size - base - 1) / delta
+  } else {
+    0
   };
 
   SizeClassIndex(NTINY + group_idx * NGROUPS + offset)
