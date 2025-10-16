@@ -47,6 +47,7 @@ dependencies = [
  "basealloc-fixed",
  "basealloc-list",
  "basealloc-rtree",
+ "basealloc-sync",
  "basealloc-sys",
  "getset",
  "spin",

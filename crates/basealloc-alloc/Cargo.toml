@@ -9,6 +9,7 @@ basealloc-list = { workspace = true }
 basealloc-fixed = { workspace = true }
 basealloc-rtree = { workspace = true }
 basealloc-bitmap = { workspace = true }
+basealloc-sync = { workspace = true }
 
 spin = { workspace = true }
 getset = { workspace = true }

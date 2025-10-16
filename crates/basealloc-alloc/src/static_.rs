@@ -2,16 +2,14 @@ use core::sync::atomic::{
   AtomicPtr,
   Ordering,
 };
-use std::{
-  ptr::NonNull,
-  sync::LazyLock,
-};
+use std::ptr::NonNull;
 
 use basealloc_bitmap::{
   Bitmap,
   BitmapWord,
 };
 use basealloc_rtree::RTree;
+use basealloc_sync::LazyLock;
 use basealloc_sys::extent::Extent;
 use getset::Getters;
 
