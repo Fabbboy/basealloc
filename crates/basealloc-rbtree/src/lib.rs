@@ -53,10 +53,9 @@ where
   }
 }
 
-pub struct RBTree<T, F>
+pub struct RBTree<T, F = fn(&T, &T) -> Ordering>
 where
   T: HasNode,
-  F: Fn(&T, &T) -> Ordering,
 {
   root: Option<NonNull<T>>,
   bump: Bump,
