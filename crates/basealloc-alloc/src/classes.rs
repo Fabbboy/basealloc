@@ -1,6 +1,7 @@
 use std::sync::OnceLock;
 
 use basealloc_sys::prelude::*;
+use basealloc_sys::prim::{likely, unlikely};
 
 use crate::{
   WORD,
@@ -121,7 +122,7 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
   table
 }
 
-#[cold]
+#[inline]
 fn class_for_regular(size: usize) -> SizeClassIndex {
   let log = (usize::BITS - size.leading_zeros()) as usize - 1;
   let group_idx = log - FIRST_REGULAR;
@@ -138,11 +139,11 @@ fn class_for_regular(size: usize) -> SizeClassIndex {
 
 #[inline(always)]
 pub fn class_for(size: usize) -> Option<SizeClassIndex> {
-  if size == 0 || size > SCLASS_CUTOFF {
+  if unlikely(size == 0 || size > SCLASS_CUTOFF) {
     return None;
   }
 
-  if size <= TINY_CUTOFF {
+  if likely(size <= TINY_CUTOFF) {
     let idx = TINY_LOOKUP[(size - 1) >> LOOKUP_SHIFT] as usize;
     return Some(SizeClassIndex(idx));
   }

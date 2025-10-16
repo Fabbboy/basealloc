@@ -77,6 +77,26 @@ pub const fn va_size() -> usize {
   32
 }
 
+#[inline(always)]
+#[cold]
+fn cold_path() {}
+
+#[inline(always)]
+pub fn likely(b: bool) -> bool {
+  if !b {
+    cold_path();
+  }
+  b
+}
+
+#[inline(always)]
+pub fn unlikely(b: bool) -> bool {
+  if b {
+    cold_path();
+  }
+  b
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
