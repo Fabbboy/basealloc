@@ -1,5 +1,6 @@
 use core::{
   cmp,
+  mem::MaybeUninit,
   ops::Range,
   sync::atomic::{
     AtomicBool,
@@ -28,14 +29,12 @@ use crate::{
 pub enum ExtentError {
   SystemError(SysError),
   OutOfBounds,
-  NonOwning,
 }
 
 pub type ExtentResult<T> = Result<T, ExtentError>;
 
 pub struct Extent {
   slice: &'static mut [u8],
-  owning: AtomicBool,
   node: RBNode<Extent>,
   link: Link<Extent>,
 }
@@ -46,14 +45,9 @@ impl Extent {
 
     Ok(Extent {
       slice,
-      owning: AtomicBool::new(true),
       node: RBNode::default(),
       link: Link::default(),
     })
-  }
-
-  pub fn is_owning(&self) -> bool {
-    self.owning.load(Ordering::Acquire)
   }
 
   // Other considerations:
@@ -65,14 +59,11 @@ impl Extent {
   // - abdicate
   // - takeover
   // - invasion
-  pub fn giveup(mut self, other: &mut Extent) -> ExtentResult<()> {
-    if !self.is_owning() {
-      return Err(ExtentError::NonOwning);
-    }
-
-    core::mem::swap(&mut self.slice, &mut other.slice);
-    self.owning.store(false, Ordering::Release);
-    Ok(())
+  pub fn giveup(mut self) -> Extent {
+    let target = MaybeUninit::uninit();
+    core::mem::swap(&mut self.slice, unsafe { &mut *target.as_ptr() });
+    self.slice = &mut [];
+    unsafe { target.assume_init() }
   }
 
   pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
@@ -204,5 +195,14 @@ mod tests {
     let ps = page_size();
     let extent = Extent::new(ps, SysOption::Commit).unwrap();
     drop(extent);
+  }
+
+  #[test]
+  fn test_extent_giveup() {
+    let ps = page_size();
+    let extent = Extent::new(ps, SysOption::Commit).unwrap();
+    let len = extent.as_ref().len();
+    let extent2 = extent.giveup();
+    assert_eq!(extent2.as_ref().len(), len);
   }
 }
