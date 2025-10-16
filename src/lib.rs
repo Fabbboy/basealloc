@@ -13,7 +13,7 @@ use basealloc_alloc::static_::acquire_this_arena;
 pub struct BaseAlloc {}
 
 impl BaseAlloc {
-  pub fn info(ptr: *mut u8) -> Option<Layout> {
+  pub fn sizeof(ptr: *mut u8) -> Option<usize> {
     _ = ptr;
     None
   }

@@ -11,7 +11,6 @@ use core::{
   },
 };
 
-
 #[global_allocator]
 static ALLOC: BaseAlloc = BaseAlloc {};
 
@@ -35,12 +34,13 @@ pub extern "C" fn free(ptr: *mut u8) {
     return;
   }
 
-  let info = BaseAlloc::info(ptr);
-  if info.is_none() {
+  let sizeof = BaseAlloc::sizeof(ptr);
+  if sizeof.is_none() {
     return;
   }
 
-  unsafe { ALLOC.dealloc(ptr, info.unwrap()) };
+  let layout = unsafe { Layout::from_size_align_unchecked(sizeof.unwrap(), 1) };
+  unsafe { ALLOC.dealloc(ptr, layout) };
 }
 
 #[unsafe(no_mangle)]
@@ -54,12 +54,12 @@ pub extern "C" fn realloc(ptr: *mut u8, size: usize) -> *mut u8 {
     return BaseAlloc::sentinel();
   }
 
-  let info = BaseAlloc::info(ptr);
-  if info.is_none() {
+  let old_size = BaseAlloc::sizeof(ptr);
+  if old_size.is_none() {
     return ptr::null_mut();
   }
 
-  let old_layout = info.unwrap();
+  let old_layout = unsafe { Layout::from_size_align_unchecked(old_size.unwrap(), 1) };
   let new_layout = match Layout::from_size_align(size, old_layout.align()) {
     Ok(l) => l,
     Err(_) => return ptr::null_mut(),
@@ -115,4 +115,18 @@ pub extern "C" fn aligned_alloc(align: usize, size: usize) -> *mut u8 {
 
   let layout = layout.unwrap();
   unsafe { ALLOC.alloc(layout) }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn malloc_usable_size(ptr: *mut u8) -> usize {
+  if BaseAlloc::is_invalid(ptr) {
+    return 0;
+  }
+
+  let sizeof = BaseAlloc::sizeof(ptr);
+  if sizeof.is_none() {
+    return 0;
+  }
+
+  sizeof.unwrap()
 }
