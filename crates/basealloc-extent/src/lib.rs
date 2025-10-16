@@ -6,6 +6,10 @@ use core::{
   ops::Range,
 };
 
+use basealloc_list::{
+  HasLink,
+  Link,
+};
 use basealloc_sys::{
   GLOBAL_SYSTEM,
   Giveup,
@@ -25,13 +29,17 @@ pub type ExtentResult<T> = Result<T, ExtentError>;
 
 pub struct Extent {
   slice: &'static mut [u8],
+  link: Link<Extent>,
 }
 
 impl Extent {
   pub fn new(size: usize, options: SysOption) -> ExtentResult<Extent> {
     let slice = unsafe { GLOBAL_SYSTEM.alloc(size, options) }.map_err(ExtentError::SystemError)?;
 
-    Ok(Extent { slice })
+    Ok(Extent {
+      slice,
+      link: Link::default(),
+    })
   }
 
   pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
@@ -79,6 +87,16 @@ impl AsMut<[u8]> for Extent {
 impl Drop for Extent {
   fn drop(&mut self) {
     let _ = unsafe { GLOBAL_SYSTEM.dealloc(self.slice) };
+  }
+}
+
+impl HasLink for Extent {
+  fn link(&self) -> &Link<Self> {
+    &self.link
+  }
+
+  fn link_mut(&mut self) -> &mut Link<Self> {
+    &mut self.link
   }
 }
 
