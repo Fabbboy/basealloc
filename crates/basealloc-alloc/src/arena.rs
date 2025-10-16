@@ -1,7 +1,6 @@
-use core::{
-  mem::MaybeUninit,
-  ptr::NonNull,
-};
+use core::
+  ptr::NonNull
+;
 
 use basealloc_fixed::bump::{
   Bump,
