@@ -44,6 +44,7 @@ name = "basealloc-alloc"
 version = "0.1.0"
 dependencies = [
  "basealloc-bitmap",
+ "basealloc-extent",
  "basealloc-fixed",
  "basealloc-list",
  "basealloc-rbtree",
@@ -59,9 +60,17 @@ name = "basealloc-bitmap"
 version = "0.1.0"
 
 [[package]]
+name = "basealloc-extent"
+version = "0.1.0"
+dependencies = [
+ "basealloc-sys",
+]
+
+[[package]]
 name = "basealloc-fixed"
 version = "0.1.0"
 dependencies = [
+ "basealloc-extent",
  "basealloc-list",
  "basealloc-sys",
 ]

@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 basealloc-sys = { workspace = true }
 basealloc-list = { workspace = true }
+basealloc-extent = { workspace = true }

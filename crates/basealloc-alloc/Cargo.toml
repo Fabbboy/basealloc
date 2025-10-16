@@ -11,6 +11,7 @@ basealloc-rtree = { workspace = true }
 basealloc-bitmap = { workspace = true }
 basealloc-sync = { workspace = true }
 basealloc-rbtree = { workspace = true }
+basealloc-extent = { workspace = true }
 
 spin = { workspace = true }
 getset = { workspace = true }

@@ -1,0 +1,7 @@
+[package]
+name = "basealloc-extent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+basealloc-sys = { workspace = true }

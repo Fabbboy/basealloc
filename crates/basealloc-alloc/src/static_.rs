@@ -10,7 +10,7 @@ use basealloc_bitmap::{
 };
 use basealloc_rtree::RTree;
 use basealloc_sync::LazyLock;
-use basealloc_sys::extent::Extent;
+use basealloc_extent::Extent;
 use getset::Getters;
 
 use crate::{

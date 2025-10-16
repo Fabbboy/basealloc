@@ -13,16 +13,14 @@ use crate::fixed::{
   FixedError,
 };
 
+use basealloc_extent::{Extent, ExtentError};
 use basealloc_list::{
   HasLink,
   Link,
   List,
 };
 use basealloc_sys::{
-  extent::{
-    Extent,
-    ExtentError,
-  },
+ 
   math::align_up,
   prim::{
     PrimError,

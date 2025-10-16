@@ -1,6 +1,5 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
-pub mod extent;
 pub mod math;
 pub mod prim;
 pub mod system;
