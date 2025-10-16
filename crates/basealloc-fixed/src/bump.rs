@@ -93,8 +93,6 @@ impl Drop for Chunk {
     unsafe {
       ManuallyDrop::drop(&mut self.fixed);
       ManuallyDrop::drop(&mut self.link);
-
-      // SAFETY: MUST BE DROPPED LAST
       ManuallyDrop::drop(&mut self.extent);
     }
   }
@@ -174,8 +172,8 @@ impl Drop for Bump {
 
     while let Some(ptr) = current {
       let chunk_ref = as_ref(ptr);
-      List::remove(chunk_ref);
       current = *chunk_ref.link().next();
+      List::remove(chunk_ref);
       unsafe { drop_in_place(chunk_ref) };
     }
   }

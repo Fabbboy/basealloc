@@ -2,7 +2,10 @@
 
 use core::{
   cmp,
-  mem::MaybeUninit,
+  mem::{
+    ManuallyDrop,
+    MaybeUninit,
+  },
   ops::Range,
 };
 
@@ -28,8 +31,8 @@ pub enum ExtentError {
 pub type ExtentResult<T> = Result<T, ExtentError>;
 
 pub struct Extent {
+  link: ManuallyDrop<Link<Extent>>,
   slice: &'static mut [u8],
-  link: Link<Extent>,
 }
 
 impl Extent {
@@ -38,7 +41,7 @@ impl Extent {
 
     Ok(Extent {
       slice,
-      link: Link::default(),
+      link: ManuallyDrop::new(Link::default()),
     })
   }
 
@@ -92,11 +95,11 @@ impl Drop for Extent {
 
 impl HasLink for Extent {
   fn link(&self) -> &Link<Self> {
-    &self.link
+    &*self.link
   }
 
   fn link_mut(&mut self) -> &mut Link<Self> {
-    &mut self.link
+    &mut *self.link
   }
 }
 
