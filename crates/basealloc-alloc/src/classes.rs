@@ -2,10 +2,11 @@ use std::sync::OnceLock;
 
 use basealloc_sys::prelude::*;
 
-use crate::config::{
-  NSCLASSES,
-  QUANTUM,
-};
+use crate::WORD;
+
+pub const NSCLASSES: usize = 128;
+pub const QUANTUM: usize = WORD * 2;
+pub const QUANTUM_SHIFT: usize = log2c(QUANTUM);
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;

@@ -19,14 +19,16 @@ use crate::{
   arena::{
     Arena,
     ArenaResult,
-  },
-  config::{
-    ARENA_BMS,
-    CHUNK_SIZE,
-    FANOUT,
-    MAX_ARENAS,
-  },
+  }, MAX_ARENAS, WORD_TRAILING
 };
+
+pub const ARENA_BMS: usize = core::mem::size_of::<BitmapWord>() * MAX_ARENAS;
+
+pub const CHUNK_SHIFT: usize = 16 + WORD_TRAILING;
+pub const CHUNK_SIZE: usize = 1 << CHUNK_SHIFT;
+
+const BITS_PER_LEVEL: usize = 9;
+pub const FANOUT: usize = 1 << BITS_PER_LEVEL;
 
 thread_local! {
   pub static THREAD_ARENA: LazyLock<AtomicPtr<Arena>> = LazyLock::new(|| {

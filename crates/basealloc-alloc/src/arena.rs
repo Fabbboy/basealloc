@@ -40,8 +40,9 @@ impl Arena {
 mod tests {
   use core::ptr::drop_in_place;
 
-  use super::*;
-  use crate::config::CHUNK_SIZE;
+  use crate::static_::CHUNK_SIZE;
+
+use super::*; 
 
   #[test]
   fn test_arena_creation() {

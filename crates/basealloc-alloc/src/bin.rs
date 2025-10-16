@@ -1,3 +1,1 @@
-pub struct Bin {
-  
-}
+pub struct Bin {}
