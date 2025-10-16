@@ -9,7 +9,7 @@ use basealloc_bitmap::{
   BitmapWord,
 };
 use basealloc_rtree::RTree;
-use basealloc_sync::LazyLock;
+use basealloc_sync::lazy::LazyLock;
 use basealloc_extent::Extent;
 use getset::Getters;
 

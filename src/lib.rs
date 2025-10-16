@@ -19,7 +19,7 @@ use basealloc_alloc::{
     acquire_this_arena,
   },
 };
-use basealloc_sync::LazyLock;
+use basealloc_sync::lazy::LazyLock;
 
 static FALLBACK: LazyLock<AtomicPtr<Arena>> =
   LazyLock::new(|| AtomicPtr::new(unsafe { Arena::new(usize::MAX, CHUNK_SIZE).unwrap().as_ptr() }));
