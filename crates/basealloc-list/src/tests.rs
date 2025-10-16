@@ -11,10 +11,7 @@ impl TestNode {
   fn new(value: i32) -> Self {
     Self {
       value,
-      link: Link {
-        next: None,
-        prev: None,
-      },
+      link: Link::default(),
     }
   }
 }
@@ -39,8 +36,8 @@ fn test_insert_before() {
   let node1_ptr = NonNull::from(&node1);
   let node2_ptr = NonNull::from(&node2);
 
-  assert_eq!(node2.link().next(), &Some(node1_ptr));
-  assert_eq!(node1.link().prev(), &Some(node2_ptr));
+  assert_eq!(node2.link().next(), Some(node1_ptr));
+  assert_eq!(node1.link().prev(), Some(node2_ptr));
 }
 
 #[test]
@@ -53,8 +50,8 @@ fn test_insert_after() {
   let node1_ptr = NonNull::from(&node1);
   let node2_ptr = NonNull::from(&node2);
 
-  assert_eq!(node1.link().next(), &Some(node2_ptr));
-  assert_eq!(node2.link().prev(), &Some(node1_ptr));
+  assert_eq!(node1.link().next(), Some(node2_ptr));
+  assert_eq!(node2.link().prev(), Some(node1_ptr));
 }
 
 #[test]
@@ -70,8 +67,8 @@ fn test_remove() {
   let node1_ptr = NonNull::from(&node1);
   let node3_ptr = NonNull::from(&node3);
 
-  assert_eq!(node1.link().next(), &Some(node3_ptr));
-  assert_eq!(node3.link().prev(), &Some(node1_ptr));
+  assert_eq!(node1.link().next(), Some(node3_ptr));
+  assert_eq!(node3.link().prev(), Some(node1_ptr));
   assert!(node2.link().next().is_none());
   assert!(node2.link().prev().is_none());
 }

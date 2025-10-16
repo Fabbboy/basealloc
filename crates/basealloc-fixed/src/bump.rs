@@ -172,7 +172,7 @@ impl Drop for Bump {
 
     while let Some(ptr) = current {
       let chunk_ref = as_ref(ptr);
-      current = *chunk_ref.link().next();
+      current = chunk_ref.link().next();
       List::remove(chunk_ref);
       unsafe { drop_in_place(chunk_ref) };
     }

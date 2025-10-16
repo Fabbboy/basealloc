@@ -6,12 +6,9 @@ use core::{
     NonNull,
     drop_in_place,
   },
+  sync::atomic::{AtomicPtr, Ordering},
 };
 
-use getset::{
-  Getters,
-  MutGetters,
-};
 
 pub trait HasLink {
   fn link(&self) -> &Link<Self>
@@ -22,15 +19,36 @@ pub trait HasLink {
     Self: Sized;
 }
 
-#[derive(Debug, Getters, MutGetters)]
+#[derive(Debug)]
 pub struct Link<T>
 where
   T: HasLink,
 {
-  #[getset(get = "pub", get_mut = "pub")]
-  next: Option<NonNull<T>>,
-  #[getset(get = "pub", get_mut = "pub")]
-  prev: Option<NonNull<T>>,
+  next: AtomicPtr<T>,
+  prev: AtomicPtr<T>,
+}
+
+impl<T> Link<T>
+where
+  T: HasLink,
+{
+  pub fn next(&self) -> Option<NonNull<T>> {
+    NonNull::new(self.next.load(Ordering::Acquire))
+  }
+  
+  pub fn prev(&self) -> Option<NonNull<T>> {
+    NonNull::new(self.prev.load(Ordering::Acquire))
+  }
+  
+  pub fn set_next(&self, ptr: Option<NonNull<T>>) {
+    let raw = ptr.map_or(core::ptr::null_mut(), |p| p.as_ptr());
+    self.next.store(raw, Ordering::Release);
+  }
+  
+  pub fn set_prev(&self, ptr: Option<NonNull<T>>) {
+    let raw = ptr.map_or(core::ptr::null_mut(), |p| p.as_ptr());
+    self.prev.store(raw, Ordering::Release);
+  }
 }
 
 impl<T> Default for Link<T>
@@ -39,8 +57,8 @@ where
 {
   fn default() -> Self {
     Self {
-      next: None,
-      prev: None,
+      next: AtomicPtr::new(core::ptr::null_mut()),
+      prev: AtomicPtr::new(core::ptr::null_mut()),
     }
   }
 }
@@ -62,17 +80,19 @@ impl List {
     let at_ptr = Self::to_non_null(at);
     let item_ptr = Self::to_non_null(item);
 
-    let item_link = item.link_mut();
-    let at_link = at.link_mut();
+    let item_link = item.link();
+    let at_link = at.link();
 
-    item_link.next = Some(at_ptr);
-    item_link.prev = at_link.prev;
-
-    if let Some(mut prev) = at_link.prev {
-      unsafe { prev.as_mut().link_mut().next = Some(item_ptr) };
-    }
-
-    at_link.prev = Some(item_ptr);
+    item_link.set_next(Some(at_ptr));
+    
+    let prev_ptr = at_link.prev();
+    item_link.set_prev(prev_ptr);
+    
+    prev_ptr.map(|prev| unsafe {
+      prev.as_ref().link().set_next(Some(item_ptr))
+    });
+    
+    at_link.set_prev(Some(item_ptr));
   }
 
   pub fn insert_after<T>(item: &mut T, at: &mut T)
@@ -82,35 +102,40 @@ impl List {
     let at_ptr = Self::to_non_null(at);
     let item_ptr = Self::to_non_null(item);
 
-    let item_link = item.link_mut();
-    let at_link = at.link_mut();
+    let item_link = item.link();
+    let at_link = at.link();
 
-    item_link.prev = Some(at_ptr);
-    item_link.next = at_link.next;
-
-    if let Some(mut next) = at_link.next {
-      unsafe { next.as_mut().link_mut().prev = Some(item_ptr) };
-    }
-
-    at_link.next = Some(item_ptr);
+    item_link.set_prev(Some(at_ptr));
+    
+    let next_ptr = at_link.next();
+    item_link.set_next(next_ptr);
+    
+    next_ptr.map(|next| unsafe {
+      next.as_ref().link().set_prev(Some(item_ptr))
+    });
+    
+    at_link.set_next(Some(item_ptr));
   }
 
   pub fn remove<T>(item: &mut T)
   where
     T: HasLink,
   {
-    let item_link = item.link_mut();
+    let item_link = item.link();
 
-    if let Some(mut prev) = item_link.prev {
-      unsafe { prev.as_mut().link_mut().next = item_link.next };
-    }
+    let prev_ptr = item_link.prev();
+    let next_ptr = item_link.next();
 
-    if let Some(mut next) = item_link.next {
-      unsafe { next.as_mut().link_mut().prev = item_link.prev };
-    }
+    prev_ptr.map(|prev| unsafe {
+      prev.as_ref().link().set_next(next_ptr)
+    });
 
-    item_link.next = None;
-    item_link.prev = None;
+    next_ptr.map(|next| unsafe {
+      next.as_ref().link().set_prev(prev_ptr)
+    });
+
+    item_link.set_next(None);
+    item_link.set_prev(None);
   }
 
   pub fn drain<'list, T>(start: &'list mut T) -> ListDrainer<'list, T>
@@ -157,13 +182,10 @@ where
   type Item = &'list mut T;
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(mut current) = self.next {
-      let current_ref = unsafe { current.as_mut() };
-      self.next = current_ref.link().next;
-      Some(current_ref)
-    } else {
-      None
-    }
+    let current = self.next.take()?;
+    let current_ref = unsafe { current.as_ref() };
+    self.next = current_ref.link().next();
+    Some(unsafe { &mut *(current.as_ptr()) })
   }
 }
 
@@ -212,14 +234,11 @@ where
   type Item = &'list mut T;
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(mut current) = self.next {
-      let current_ref = unsafe { current.as_mut() };
-      self.next = current_ref.link().next;
-      List::remove(current_ref);
-      Some(current_ref)
-    } else {
-      None
-    }
+    let current = self.next.take()?;
+    let current_ref = unsafe { &mut *current.as_ptr() };
+    self.next = current_ref.link().next();
+    List::remove(current_ref);
+    Some(current_ref)
   }
 }
 
@@ -228,10 +247,10 @@ where
   T: HasLink + 'list,
 {
   fn drop(&mut self) {
-    while let Some(ptr) = self.next {
+    while let Some(current) = self.next.take() {
       unsafe {
-        self.next = ptr.as_ref().link().next;
-        drop_in_place(ptr.as_ptr());
+        self.next = current.as_ref().link().next();
+        drop_in_place(current.as_ptr());
       }
     }
   }
@@ -242,8 +261,8 @@ where
   T: HasLink,
 {
   fn drop(&mut self) {
-    self.next = None;
-    self.prev = None;
+    self.set_next(None);
+    self.set_prev(None);
   }
 }
 
