@@ -86,6 +86,11 @@ impl Arena {
     _ = layout;
     todo!()
   }
+
+  pub fn sizeof(&self, ptr: NonNull<u8>) -> Option<usize> {
+    _ = ptr;
+    None
+  }
 }
 
 #[cfg(test)]

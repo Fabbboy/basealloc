@@ -14,7 +14,15 @@ pub struct BaseAlloc {}
 
 impl BaseAlloc {
   pub fn sizeof(ptr: *mut u8) -> Option<usize> {
-    _ = ptr;
+    if Self::is_invalid(ptr) {
+      return None;
+    }
+
+    if let Some(mut arena_ptr) = acquire_this_arena() {
+      let arena = unsafe { arena_ptr.as_mut() };
+      return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
+    }
+
     None
   }
 
