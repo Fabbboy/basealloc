@@ -83,19 +83,6 @@ impl Arena {
       .map_err(ArenaError::BinError)
   }
 
-  pub fn allocate_many<const N: usize>(
-    //TODO: rollback on failure
-    &mut self,
-    sc: SizeClassIndex,
-    out: &mut [NonNull<u8>; N],
-  ) -> ArenaResult<()> {
-    for slot in out.iter_mut() {
-      let ptr = self.allocate(sc)?;
-      *slot = ptr;
-    }
-    Ok(())
-  }
-
   pub fn allocate_large(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
     let extent_store = self
       .bump
