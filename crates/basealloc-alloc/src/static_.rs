@@ -38,6 +38,7 @@ use crate::{
     ArenaResult,
   },
   bin::Bin,
+  classes::SizeClass,
   slab::Slab,
 };
 
@@ -77,17 +78,19 @@ pub struct ClassEntry {
   bin: NonNull<Bin>,
   #[getset(get = "pub")]
   slab: NonNull<Slab>,
+  #[getset(get = "pub")]
+  class: SizeClass,
 }
 
 impl ClassEntry {
-  fn new(bin: NonNull<Bin>, slab: NonNull<Slab>) -> Self {
-    Self { bin, slab }
+  fn new(bin: NonNull<Bin>, slab: NonNull<Slab>, class: SizeClass) -> Self {
+    Self { bin, slab, class }
   }
 }
 
 pub enum Entry {
   Class(ClassEntry),
-  Large(AtomicPtr<Extent>),
+  Large(NonNull<Extent>),
 }
 
 impl Entry {
@@ -96,7 +99,7 @@ impl Entry {
   }
 
   fn new_large(extent: NonNull<Extent>) -> Self {
-    Entry::Large(AtomicPtr::new(extent.as_ptr()))
+    Entry::Large(extent)
   }
 }
 
@@ -183,6 +186,7 @@ pub fn register_sc(
   range: NonNull<Extent>,
   bin: NonNull<Bin>,
   slab: NonNull<Slab>,
+  class: SizeClass,
 ) -> Result<(), LookupError> {
   let Some(range) = extent_range(range)? else {
     return Ok(());
@@ -190,7 +194,9 @@ pub fn register_sc(
 
   let tree = unsafe { LOOKUP.tree_mut() };
 
-  register_entries(tree, &range, || Entry::new_sc(ClassEntry::new(bin, slab)))
+  register_entries(tree, &range, || {
+    Entry::new_sc(ClassEntry::new(bin, slab, class))
+  })
 }
 
 pub fn register_large(extent: NonNull<Extent>) -> Result<(), LookupError> {
@@ -341,7 +347,7 @@ mod tests {
 
   static TEST_LOCK: Mutex<()> = Mutex::new(());
 
-  fn create_test_bin_and_slab() -> (NonNull<Bin>, NonNull<Slab>) {
+  fn create_test_bin_and_slab() -> (NonNull<Bin>, NonNull<Slab>, SizeClass) {
     let mut bump = Bump::new(CHUNK_SIZE);
     let class_idx = class_for(QUANTUM).expect("get class");
     let class = crate::classes::class_at(class_idx);
@@ -356,7 +362,7 @@ mod tests {
     let slab_ptr =
       Slab::new(&mut bump, class, slab_size, unsafe { bin_ptr.as_mut() }).expect("create slab");
 
-    (bin_ptr, slab_ptr)
+    (bin_ptr, slab_ptr, class)
   }
 
   #[test]
@@ -369,9 +375,9 @@ mod tests {
 
     let arena = unsafe { Arena::new(0, CHUNK_SIZE).expect("arena") };
     let owner = arena;
-    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
+    let (bin_ptr, slab_ptr, class) = create_test_bin_and_slab();
 
-    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("register extent");
+    register_sc(extent_ptr, bin_ptr, slab_ptr, class).expect("register extent");
 
     let base = extent.as_ref().as_ptr() as usize;
     let interior = base + (ps / 2);
@@ -397,9 +403,9 @@ mod tests {
 
     let first_arena = unsafe { Arena::new(3, CHUNK_SIZE).expect("first arena") };
     let second_arena = unsafe { Arena::new(4, CHUNK_SIZE).expect("second arena") };
-    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
+    let (bin_ptr, slab_ptr, class) = create_test_bin_and_slab();
 
-    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("register once");
+    register_sc(extent_ptr, bin_ptr, slab_ptr, class).expect("register once");
 
     let base = extent.as_ref().as_ptr() as usize;
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
@@ -407,8 +413,8 @@ mod tests {
     unregister_range(extent_ptr).expect("unregister");
     assert!(lookup(base).is_none(), "mapping should be cleared");
 
-    let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
-    register_sc(extent_ptr, bin_ptr2, slab_ptr2).expect("register twice");
+    let (bin_ptr2, slab_ptr2, class2) = create_test_bin_and_slab();
+    register_sc(extent_ptr, bin_ptr2, slab_ptr2, class2).expect("register twice");
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     unregister_range(extent_ptr).expect("final unregister");
@@ -429,15 +435,16 @@ mod tests {
 
     let first_arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("first arena") };
     let second_arena = unsafe { Arena::new(6, CHUNK_SIZE).expect("second arena") };
-    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
+    let (bin_ptr, slab_ptr, class) = create_test_bin_and_slab();
 
-    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("initial register");
+    register_sc(extent_ptr, bin_ptr, slab_ptr, class).expect("initial register");
 
     let base = extent.as_ref().as_ptr() as usize;
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
-    let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
-    let err = register_sc(extent_ptr, bin_ptr2, slab_ptr2).expect_err("duplicate should fail");
+    let (bin_ptr2, slab_ptr2, class2) = create_test_bin_and_slab();
+    let err =
+      register_sc(extent_ptr, bin_ptr2, slab_ptr2, class2).expect_err("duplicate should fail");
     assert!(matches!(err, LookupError::Tree(RTreeError::AlreadyPresent)));
 
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));

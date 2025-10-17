@@ -38,6 +38,7 @@ dependencies = [
  "basealloc-list",
  "basealloc-rtree",
  "basealloc-sync",
+ "basealloc-sys",
  "criterion",
 ]
 

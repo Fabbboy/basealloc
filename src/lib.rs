@@ -19,9 +19,11 @@ use basealloc_alloc::{
     Entry,
     acquire_this_arena,
     lookup,
+    unregister_range,
   },
 };
 use basealloc_sync::lazy::LazyLock;
+use basealloc_sys::misc::Giveup;
 
 static FALLBACK: LazyLock<AtomicPtr<Arena>> =
   LazyLock::new(|| AtomicPtr::new(unsafe { Arena::new(usize::MAX, CHUNK_SIZE).unwrap().as_ptr() }));
@@ -34,27 +36,15 @@ impl BaseAlloc {
       return None;
     }
 
-    if let Some(entry) = lookup(ptr as usize) {
-      match entry {
-        Entry::Class(_) => {
-          if let Some(mut arena_ptr) = acquire_this_arena() {
-            let arena = unsafe { arena_ptr.as_mut() };
-            return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
-          }
-        }
-        Entry::Large(_) => {
-          todo!("Implement large allocation size retrieval")
-        }
-      }
-    }
-
-    let fallback = FALLBACK.load(Ordering::Acquire);
-    if fallback.is_null() {
+    if let None = lookup(ptr as usize) {
       return None;
     }
 
-    let arena = unsafe { &mut *fallback };
-    arena.sizeof(unsafe { NonNull::new_unchecked(ptr) })
+    let entry = lookup(ptr as usize).unwrap();
+    match entry {
+      Entry::Class(cls) => Some(cls.class().0),
+      Entry::Large(lrg) => Some(unsafe { lrg.as_ref().size() }),
+    }
   }
 
   pub fn is_invalid(ptr: *mut u8) -> bool {
@@ -68,24 +58,7 @@ impl BaseAlloc {
 
 unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    if let Some(mut arena_ptr) = acquire_this_arena() {
-      let arena = unsafe { arena_ptr.as_mut() };
-      if let Ok(ptr) = arena.allocate(layout) {
-        return ptr.as_ptr();
-      }
-    }
-
-    let fallback = FALLBACK.load(Ordering::Acquire);
-    if fallback.is_null() {
-      return core::ptr::null_mut();
-    }
-
-    let arena = unsafe { &mut *fallback };
-    if let Ok(ptr) = arena.allocate(layout) {
-      return ptr.as_ptr();
-    }
-
-    core::ptr::null_mut()
+    todo!()
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -96,24 +69,17 @@ unsafe impl GlobalAlloc for BaseAlloc {
     if let Some(entry) = lookup(ptr as usize) {
       match entry {
         Entry::Class(_) => {
-          if let Some(mut arena_ptr) = acquire_this_arena() {
-            let arena = unsafe { arena_ptr.as_mut() };
-            let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
-            return;
-          }
+          todo!()
         }
-        Entry::Large(_) => {
-          todo!("Implement large allocation deallocation")
+        &Entry::Large(mut lrg) => {
+          let extent = unsafe { lrg.as_mut() };
+          let _ = unregister_range(lrg);
+          let _ = unsafe { core::ptr::read(extent) }.giveup();
+          return;
         }
       }
     }
 
-    let fallback = FALLBACK.load(Ordering::Acquire);
-    if fallback.is_null() {
-      return;
-    }
-
-    let arena = unsafe { &mut *fallback };
-    let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
+    todo!()
   }
 }

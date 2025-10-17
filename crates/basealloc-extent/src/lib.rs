@@ -7,10 +7,12 @@ use core::{
 };
 
 use basealloc_sys::{
-  misc::Giveup, system::{
+  GLOBAL_SYSTEM,
+  misc::Giveup,
+  system::{
     SysError,
     SysOption,
-  }, GLOBAL_SYSTEM
+  },
 };
 
 #[derive(Debug)]
@@ -36,6 +38,15 @@ impl Extent {
     if range.start > range.end || range.end > self.slice.len() {
       return Err(ExtentError::OutOfBounds);
     }
+    Ok(())
+  }
+
+  pub fn size(&self) -> usize {
+    self.slice.len()
+  }
+
+  pub fn modify(&mut self, opt: SysOption) -> ExtentResult<()> {
+    unsafe { GLOBAL_SYSTEM.modify(self.slice, opt) }.map_err(ExtentError::SystemError)?;
     Ok(())
   }
 

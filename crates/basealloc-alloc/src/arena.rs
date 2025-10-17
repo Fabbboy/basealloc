@@ -54,7 +54,7 @@ impl Arena {
     Ok(unsafe { NonNull::new_unchecked(this_uninit) })
   }
 
-  fn allocate_large(&self, layout: Layout) -> ArenaResult<NonNull<u8>> {
+  /*  fn allocate_large(&self, layout: Layout) -> ArenaResult<NonNull<u8>> {
     _ = layout;
     todo!()
   }
@@ -70,9 +70,9 @@ impl Arena {
     bin
       .allocate(&mut self.bump, layout)
       .map_err(ArenaError::BinError)
-  }
+  } */
 
-  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
+  /*   fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
     _ = ptr;
     _ = layout;
     todo!()
@@ -87,22 +87,16 @@ impl Arena {
     let class = class.unwrap();
     let bin = &mut self.bins[class.0];
     bin.deallocate(ptr, layout).map_err(ArenaError::BinError)
-  }
-
-  pub fn sizeof(&self, ptr: NonNull<u8>) -> Option<usize> {
-    _ = ptr;
-    None
-  }
+  } */
 }
 
 #[cfg(test)]
 mod tests {
   use core::ptr::drop_in_place;
- 
 
   use crate::CHUNK_SIZE;
 
-use super::*;
+  use super::*;
 
   #[test]
   fn test_arena_creation() {
