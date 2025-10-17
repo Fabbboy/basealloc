@@ -1,9 +1,13 @@
 use core::{
   alloc::Layout,
   cmp,
-  mem::{ManuallyDrop, MaybeUninit},
+  mem::{
+    ManuallyDrop,
+    MaybeUninit,
+  },
   ptr::{
-    drop_in_place, NonNull
+    NonNull,
+    drop_in_place,
   },
 };
 

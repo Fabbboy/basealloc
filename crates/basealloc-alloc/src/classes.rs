@@ -40,7 +40,6 @@ const LOOKUP_SHIFT: usize = WORD_TRAILING + 1;
 //   NREGULAR = (MAX_REGULAR - FIRST_REGULAR) * NGROUPS ≈ 44 classes
 // - SCLASS_CUTOFF = 2^MAX_REGULAR ≈ 2MB: maximum size handled by size classes
 
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SizeClassIndex(pub usize);
 
@@ -106,7 +105,7 @@ const fn generate_classes() -> [SizeClass; NSCLASSES] {
 
     let mut i = 0;
     while i < NGROUPS && idx < NSCLASSES {
-        classes[idx] = SizeClass(base + delta * (i + 1), SizeClassIndex(idx));
+      classes[idx] = SizeClass(base + delta * (i + 1), SizeClassIndex(idx));
       idx += 1;
       i += 1;
     }
@@ -235,7 +234,7 @@ mod tests {
       );
 
       if idx > 0 {
-  let SizeClass(prev_size, _) = CLASSES[idx - 1];
+        let SizeClass(prev_size, _) = CLASSES[idx - 1];
         let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
         assert_eq!(
           found_idx,

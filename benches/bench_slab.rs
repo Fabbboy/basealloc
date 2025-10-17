@@ -1,8 +1,19 @@
+use criterion::{
+  BenchmarkId,
+  Criterion,
+  criterion_group,
+  criterion_main,
+};
 use std::hint::black_box;
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
 
 use basealloc_alloc::{
-  classes::{QUANTUM, class_for, class_at, pages_for, SlabSize},
+  classes::{
+    QUANTUM,
+    SlabSize,
+    class_at,
+    class_for,
+    pages_for,
+  },
   slab::Slab,
   static_::CHUNK_SIZE,
 };

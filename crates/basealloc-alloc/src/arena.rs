@@ -40,7 +40,7 @@ pub struct Arena {
 impl Arena {
   pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
-    let this_uninit = bump.create::<Self>().map_err(ArenaError::BumpError)? as *mut Self ;
+    let this_uninit = bump.create::<Self>().map_err(ArenaError::BumpError)? as *mut Self;
 
     unsafe { core::ptr::addr_of_mut!((*this_uninit).index).write(index) };
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
@@ -72,7 +72,7 @@ impl Arena {
       .map_err(ArenaError::BinError)
   }
 
-  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()>  {
+  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
     _ = ptr;
     _ = layout;
     todo!()

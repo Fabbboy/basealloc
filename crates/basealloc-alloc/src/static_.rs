@@ -18,6 +18,14 @@ use basealloc_rtree::{
   RTreeError,
 };
 use basealloc_sync::lazy::LazyLock;
+use basealloc_sys::{
+  prelude::{
+    page_align,
+    page_align_down,
+    page_size,
+  },
+  prim::PrimError,
+};
 use getset::Getters;
 
 use crate::{
@@ -107,30 +115,119 @@ impl Lookup {
 unsafe impl Send for Lookup {}
 unsafe impl Sync for Lookup {}
 
+#[derive(Debug)]
 pub enum LookupError {
-  RTreeError(RTreeError),
+  Tree(RTreeError),
+  Align(PrimError),
+  RangeOverflow,
   NotFound,
 }
 
 static LOOKUP: Lookup = Lookup::new();
 
-pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), LookupError> {
-  let meta = LUEntry::new(owner);
-  unsafe { LOOKUP.tree_mut() }
-    .insert(extent.as_ptr() as usize, meta)
-    .map_err(LookupError::RTreeError)
+struct PageRange {
+  start: usize,
+  end: usize,
+  step: usize,
 }
 
-pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
-  if let None = unsafe { LOOKUP.tree_mut() }.remove(extent.as_ptr() as usize) {
-    return Err(LookupError::NotFound);
+impl PageRange {
+  fn iter(&self) -> PageIter {
+    PageIter {
+      current: self.start,
+      end: self.end,
+      step: self.step,
+    }
+  }
+}
+
+struct PageIter {
+  current: usize,
+  end: usize,
+  step: usize,
+}
+
+impl Iterator for PageIter {
+  type Item = usize;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if self.current >= self.end {
+      return None;
+    }
+
+    let addr = self.current;
+    self.current = self.current.saturating_add(self.step);
+    Some(addr)
+  }
+}
+
+fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<PageRange>, LookupError> {
+  let extent_ref = unsafe { extent.as_ref() };
+  let slice = extent_ref.as_ref();
+  let base = slice.as_ptr() as usize;
+  let len = slice.len();
+
+  if len == 0 {
+    return Ok(None);
+  }
+
+  let start = page_align_down(base).map_err(LookupError::Align)?;
+  let end_addr = base.checked_add(len).ok_or(LookupError::RangeOverflow)?;
+  let end = page_align(end_addr).map_err(LookupError::Align)?;
+  let step = page_size();
+
+  Ok(Some(PageRange { start, end, step }))
+}
+
+fn rollback_pages(tree: &mut RTree<LUEntry, FANOUT>, pages: &[usize]) {
+  for &key in pages {
+    let _ = tree.remove(key);
+  }
+}
+
+pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), LookupError> {
+  let Some(range) = extent_page_range(extent)? else {
+    return Ok(());
+  };
+
+  let tree = unsafe { LOOKUP.tree_mut() };
+  let mut inserted = Vec::new();
+
+  for addr in range.iter() {
+    match tree.insert(addr, LUEntry::new(owner)) {
+      Ok(()) => inserted.push(addr),
+      Err(err) => {
+        rollback_pages(tree, &inserted);
+        return Err(LookupError::Tree(err));
+      }
+    }
   }
 
   Ok(())
 }
 
+pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
+  let Some(range) = extent_page_range(extent)? else {
+    return Ok(());
+  };
+
+  let tree = unsafe { LOOKUP.tree_mut() };
+  let mut removed_any = false;
+
+  for addr in range.iter() {
+    removed_any |= tree.remove(addr).is_some();
+  }
+
+  if removed_any {
+    Ok(())
+  } else {
+    Err(LookupError::NotFound)
+  }
+}
+
 pub fn lookup_arena(at: usize) -> Option<NonNull<Arena>> {
-  let meta = unsafe { LOOKUP.tree() }.lookup(at)?;
+  let key = page_align_down(at).ok()?;
+  let meta = unsafe { LOOKUP.tree() }.lookup(key)?;
   let owner_ptr = meta.owner.load(Ordering::Acquire);
   NonNull::new(owner_ptr)
 }
@@ -202,5 +299,38 @@ impl Drop for ArenaGuard {
     let mut arena_ptr = arena_ptr.unwrap();
     let arena = unsafe { arena_ptr.as_mut() };
     unsafe { release_arena(arena) };
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use basealloc_sys::prelude::SysOption;
+  use core::ptr::drop_in_place;
+
+  #[test]
+  fn lookup_returns_owner_for_interior_pointer() {
+    let ps = page_size();
+
+    let mut extent = Extent::new(ps * 2, SysOption::Reserve).expect("reserve extent");
+    let extent_ptr = NonNull::from(&mut extent);
+
+    let arena = unsafe { Arena::new(0, CHUNK_SIZE).expect("arena") };
+    let owner = arena;
+
+    register_extent(extent_ptr, owner).expect("register extent");
+
+    let base = extent.as_ref().as_ptr() as usize;
+    let interior = base + (ps / 2);
+
+    let found = lookup_arena(interior).expect("lookup interior");
+    assert_eq!(found.as_ptr(), owner.as_ptr());
+
+    unregister_extent(extent_ptr).expect("unregister");
+    assert!(lookup_arena(interior).is_none());
+
+    unsafe {
+      drop_in_place(owner.as_ptr());
+    }
   }
 }

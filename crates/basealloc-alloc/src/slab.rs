@@ -24,6 +24,7 @@ use basealloc_list::{
   Link,
 };
 use basealloc_sys::system::SysOption;
+use getset::Getters;
 
 use crate::classes::SizeClass;
 
@@ -39,6 +40,7 @@ pub enum SlabError {
 
 pub type SlabResult<T> = Result<T, SlabError>;
 
+#[derive(Getters)]
 pub struct Slab {
   class: SizeClass,
   extent: Extent,

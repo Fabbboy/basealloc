@@ -19,11 +19,11 @@ pub mod prelude {
   pub use super::{
     GLOBAL_SYSTEM,
     math::{
+      align_down,
       align_mut_ptr,
       align_offset,
       align_ptr,
       align_up,
-      align_down,
       is_aligned,
     },
     prim::{

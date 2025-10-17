@@ -1,5 +1,7 @@
 use crate::math::{
-  align_down, align_up, is_aligned
+  align_down,
+  align_up,
+  is_aligned,
 };
 use core::sync::atomic::{
   AtomicBool,

@@ -206,7 +206,14 @@ impl Bitmap {
     self.used.store(self.bits, Ordering::Relaxed);
   }
 
-  fn iter_range<F>(&self, from_word: usize, to_word: usize, start_mask: usize, end_mask: usize, transform: F) -> Option<usize>
+  fn iter_range<F>(
+    &self,
+    from_word: usize,
+    to_word: usize,
+    start_mask: usize,
+    end_mask: usize,
+    transform: F,
+  ) -> Option<usize>
   where
     F: Fn(usize) -> usize + Copy,
   {
@@ -260,11 +267,23 @@ impl Bitmap {
     let last_word = word_index(self.bits.saturating_sub(1));
 
     self
-      .iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, transform)
+      .iter_range(
+        start_word,
+        last_word,
+        mask_from(start_offset),
+        usize::MAX,
+        transform,
+      )
       .or_else(|| self.wrap_search(start_bit, start_word, start_offset, transform))
   }
 
-  fn wrap_search<F>(&self, start_bit: usize, start_word: usize, start_offset: usize, transform: F) -> Option<usize>
+  fn wrap_search<F>(
+    &self,
+    start_bit: usize,
+    start_word: usize,
+    start_offset: usize,
+    transform: F,
+  ) -> Option<usize>
   where
     F: Fn(usize) -> usize + Copy,
   {

@@ -22,9 +22,7 @@ fn insert_and_lookup_round_trip() {
 fn duplicate_insert_fails() {
   let mut tree: RTree<usize, FANOUT> = RTree::new(CHUNK);
   tree.insert(0xDEAD, 1).expect("first insert succeeds");
-  let err = tree
-    .insert(0xDEAD, 2)
-    .expect_err("duplicate should fail");
+  let err = tree.insert(0xDEAD, 2).expect_err("duplicate should fail");
   assert!(matches!(err, RTreeError::AlreadyPresent));
 
   let removed = tree.remove(0xDEAD);
