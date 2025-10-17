@@ -1,8 +1,11 @@
 #![cfg_attr(not(test), no_std)]
 
-use core::sync::atomic::{
-  AtomicUsize,
-  Ordering,
+use core::{
+  ptr::NonNull,
+  sync::atomic::{
+    AtomicUsize,
+    Ordering,
+  },
 };
 
 #[cfg(test)]
@@ -19,13 +22,38 @@ pub type BitmapWord = AtomicUsize;
 const USIZE_BITS: usize = usize::BITS as usize;
 
 #[derive(Debug)]
-pub struct Bitmap<'slice> {
-  store: &'slice [BitmapWord],
+pub struct BmStore {
+  ptr: NonNull<BitmapWord>,
+  len: usize,
+}
+
+impl BmStore {
+  #[inline(always)]
+  pub fn as_slice(&self) -> &[BitmapWord] {
+    unsafe { core::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+  }
+}
+
+impl From<&[BitmapWord]> for BmStore {
+  fn from(slice: &[BitmapWord]) -> Self {
+    Self {
+      ptr: NonNull::new(slice.as_ptr() as *mut BitmapWord).unwrap(),
+      len: slice.len(),
+    }
+  }
+}
+
+unsafe impl Send for BmStore {}
+unsafe impl Sync for BmStore {}
+
+#[derive(Debug)]
+pub struct Bitmap {
+  store: BmStore,
   bits: usize,
   used: AtomicUsize,
 }
 
-impl<'slice> Bitmap<'slice> {
+impl Bitmap {
   #[inline(always)]
   pub const fn words(fields: usize) -> usize {
     fields.div_ceil(USIZE_BITS)
@@ -37,13 +65,13 @@ impl<'slice> Bitmap<'slice> {
   }
 
   #[inline(always)]
-  pub const fn available(&self) -> usize {
-    self.store.len() * USIZE_BITS
+  pub fn available(&self) -> usize {
+    self.store.as_slice().len() * USIZE_BITS
   }
 
   #[inline(always)]
-  pub const fn store(&self) -> &[BitmapWord] {
-    self.store
+  pub fn store(&self) -> &[BitmapWord] {
+    self.store.as_slice()
   }
 
   #[inline(always)]
@@ -63,7 +91,7 @@ impl<'slice> Bitmap<'slice> {
     Ok((word_index, bit_index))
   }
 
-  pub fn zero(store: &'slice [BitmapWord], bits: usize) -> Result<Self, BitmapError> {
+  pub fn zero(store: &[BitmapWord], bits: usize) -> Result<Self, BitmapError> {
     let available = store.len() * USIZE_BITS;
     if bits > available {
       return Err(BitmapError::InsufficientSize {
@@ -73,7 +101,7 @@ impl<'slice> Bitmap<'slice> {
     }
 
     let bitmap = Self {
-      store,
+      store: BmStore::from(store),
       bits,
       used: AtomicUsize::new(0),
     };
@@ -81,7 +109,7 @@ impl<'slice> Bitmap<'slice> {
     Ok(bitmap)
   }
 
-  pub fn one(store: &'slice [BitmapWord], bits: usize) -> Result<Self, BitmapError> {
+  pub fn one(store: &[BitmapWord], bits: usize) -> Result<Self, BitmapError> {
     let available = store.len() * USIZE_BITS;
     if bits > available {
       return Err(BitmapError::InsufficientSize {
@@ -91,7 +119,7 @@ impl<'slice> Bitmap<'slice> {
     }
 
     let bitmap = Self {
-      store,
+      store: BmStore::from(store),
       bits,
       used: AtomicUsize::new(0),
     };
@@ -99,8 +127,8 @@ impl<'slice> Bitmap<'slice> {
     Ok(bitmap)
   }
 
-  pub const fn check(&self, fields: usize) -> Result<(), BitmapError> {
-    let total_bits = self.store.len() * USIZE_BITS;
+  pub fn check(&self, fields: usize) -> Result<(), BitmapError> {
+    let total_bits = self.store.as_slice().len() * USIZE_BITS;
     if fields > total_bits {
       return Err(BitmapError::InsufficientSize {
         have: total_bits,
@@ -114,7 +142,8 @@ impl<'slice> Bitmap<'slice> {
   pub fn set(&self, index: usize) -> Result<(), BitmapError> {
     let (word_index, bit_index) = self.position(index)?;
     let mask = 1usize << bit_index;
-    self.store[word_index].fetch_or(mask, Ordering::Relaxed);
+    let store = self.store.as_slice();
+    store[word_index].fetch_or(mask, Ordering::Relaxed);
     self.used.fetch_add(1, Ordering::Relaxed);
     Ok(())
   }
@@ -123,7 +152,8 @@ impl<'slice> Bitmap<'slice> {
   pub fn clear(&self, index: usize) -> Result<(), BitmapError> {
     let (word_index, bit_index) = self.position(index)?;
     let mask = !(1usize << bit_index);
-    self.store[word_index].fetch_and(mask, Ordering::Relaxed);
+    let store = self.store.as_slice();
+    store[word_index].fetch_and(mask, Ordering::Relaxed);
     self.used.fetch_sub(1, Ordering::Relaxed);
     Ok(())
   }
@@ -131,34 +161,38 @@ impl<'slice> Bitmap<'slice> {
   #[inline]
   pub fn get(&self, index: usize) -> Result<bool, BitmapError> {
     let (word_index, bit_index) = self.position(index)?;
-    let value = self.store[word_index].load(Ordering::Relaxed);
+    let store = self.store.as_slice();
+    let value = store[word_index].load(Ordering::Relaxed);
     Ok((value & (1usize << bit_index)) != 0)
   }
 
   pub fn clear_all(&self) {
-    for word in self.store.iter() {
+    let store = self.store.as_slice();
+    for word in store.iter() {
       word.store(0, Ordering::Relaxed);
     }
     self.used.store(0, Ordering::Relaxed);
   }
 
   pub fn set_all(&self) {
+    let store = self.store.as_slice();
     let full_words = self.bits / USIZE_BITS;
 
-    for word in self.store[..full_words].iter() {
+    for word in store[..full_words].iter() {
       word.store(usize::MAX, Ordering::Relaxed);
     }
 
     let remaining_bits = self.bits % USIZE_BITS;
-    if remaining_bits > 0 && full_words < self.store.len() {
+    if remaining_bits > 0 && full_words < store.len() {
       let mask = usize::MAX >> (USIZE_BITS - remaining_bits);
-      self.store[full_words].store(mask, Ordering::Relaxed);
+      store[full_words].store(mask, Ordering::Relaxed);
     }
     self.used.store(self.bits, Ordering::Relaxed);
   }
 
   pub fn find_fs(&self) -> Option<usize> {
-    for (word_index, word) in self.store.iter().enumerate() {
+    let store = self.store.as_slice();
+    for (word_index, word) in store.iter().enumerate() {
       let value = word.load(Ordering::Relaxed);
       if value != 0 {
         let bit_offset = value.trailing_zeros() as usize;
@@ -172,7 +206,8 @@ impl<'slice> Bitmap<'slice> {
   }
 
   pub fn find_fc(&self) -> Option<usize> {
-    for (word_index, word) in self.store.iter().enumerate() {
+    let store = self.store.as_slice();
+    for (word_index, word) in store.iter().enumerate() {
       let value = word.load(Ordering::Relaxed);
       let inverted = value ^ usize::MAX;
       if inverted != 0 {

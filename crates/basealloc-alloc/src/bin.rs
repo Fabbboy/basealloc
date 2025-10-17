@@ -3,32 +3,44 @@ use core::{
   ptr::NonNull,
 };
 
-use basealloc_fixed::bump::Bump;
+use basealloc_fixed::bump::{
+  Bump,
+  BumpError,
+};
+use spin::Mutex;
 
-use crate::classes::{class_at, pages_for, BinSize, SizeClass, SizeClassIndex};
+use crate::classes::{
+  BinSize,
+  SizeClass,
+  SizeClassIndex,
+  class_at,
+  pages_for,
+};
 
 #[derive(Debug)]
-pub enum BinError {}
+pub enum BinError {
+  BumpError(BumpError),
+}
 
 pub type BinResult<T> = Result<T, BinError>;
 
 pub struct Bin {
   // SAFETY: User must ensure bin is dropped before bump.
-  bump: NonNull<Bump>,
   class: SizeClass,
   pages: BinSize,
+  lock: Mutex<()>,
 }
 
 impl Bin {
-  pub fn new(bump: &mut Bump, idx: SizeClassIndex) -> Self {
+  pub fn new(idx: SizeClassIndex) -> Self {
     Self {
-      bump: NonNull::from(bump),
       class: class_at(idx),
       pages: pages_for(idx),
+      lock: Mutex::new(()),
     }
   }
 
-  pub fn allocate(&mut self, layout: Layout) -> BinResult<NonNull<u8>> {
+  pub fn allocate(&mut self, bump: &mut Bump, layout: Layout) -> BinResult<NonNull<u8>> {
     _ = layout;
     todo!()
   }

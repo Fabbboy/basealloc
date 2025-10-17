@@ -8,7 +8,6 @@ use basealloc_fixed::bump::{
   BumpError,
 };
 use getset::CloneGetters;
-use spin::Mutex;
 
 use crate::{
   bin::{
@@ -36,7 +35,6 @@ pub struct Arena {
   index: usize,
   bins: [Bin; NSCLASSES],
   bump: Bump,
-  lock: Mutex<()>,
 }
 
 impl Arena {
@@ -46,12 +44,10 @@ impl Arena {
 
     unsafe { core::ptr::addr_of_mut!((*this_uninit).index).write(index) };
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
-    unsafe { core::ptr::addr_of_mut!((*this_uninit).lock).write(Mutex::new(())) };
 
-    let bump = unsafe { &mut *core::ptr::addr_of_mut!((*this_uninit).bump) };
     let bins = core::array::from_fn(|i| {
       let class = SizeClassIndex(i);
-      Bin::new(bump, class)
+      Bin::new(class)
     });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
 
@@ -64,7 +60,6 @@ impl Arena {
   }
 
   pub fn allocate(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
-    let _guard = self.lock.lock();
     let class = class_for(layout.size());
     if let None = class {
       return self.allocate_large(layout);
@@ -72,7 +67,7 @@ impl Arena {
 
     let class = class.unwrap();
     let bin = &mut self.bins[class.0];
-    bin.allocate(layout).map_err(ArenaError::BinError)
+    bin.allocate(&mut self.bump, layout).map_err(ArenaError::BinError)
   }
 
   fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) {

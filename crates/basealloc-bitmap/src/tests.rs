@@ -164,15 +164,10 @@ fn test_const_functionality() {
   assert_eq!(WORDS_FOR_64_BITS, 1);
   assert_eq!(BYTES_FOR_64_BITS, 8);
 
-  // Test const methods on bitmap instance
+  // Test methods on bitmap instance
   let storage: [AtomicUsize; 1] = [AtomicUsize::new(0)];
   let bitmap = Bitmap::zero(&storage, 64).unwrap();
 
-  const fn test_const_methods(bitmap: &Bitmap) -> (usize, usize) {
-    (bitmap.bits(), bitmap.available())
-  }
-
-  let (bits, available) = test_const_methods(&bitmap);
-  assert_eq!(bits, 64);
-  assert_eq!(available, 64);
+  assert_eq!(bitmap.bits(), 64);
+  assert_eq!(bitmap.available(), 64);
 }

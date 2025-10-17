@@ -43,7 +43,7 @@ struct Static {
   #[getset(get = "pub")]
   arenas: [AtomicPtr<Arena>; MAX_ARENAS],
   #[getset(get = "pub")]
-  bitmap: Bitmap<'static>,
+  bitmap: Bitmap,
 }
 
 impl Static {
