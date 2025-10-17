@@ -2,7 +2,10 @@ use core::sync::atomic::{
   AtomicPtr,
   Ordering,
 };
-use std::{ptr::NonNull, sync::atomic::AtomicUsize};
+use std::{
+  ptr::NonNull,
+  sync::atomic::AtomicUsize,
+};
 
 use basealloc_bitmap::{
   Bitmap,
@@ -40,10 +43,7 @@ thread_local! {
 
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
 static BM_LAST: AtomicUsize = AtomicUsize::new(0);
-static STATIC: LazyLock<Static> = LazyLock::new(|| {
-  let s = Static::new(&BM_STORE);
-  s
-});
+static STATIC: LazyLock<Static> = LazyLock::new(|| Static::new(&BM_STORE));
 
 #[derive(Getters)]
 struct Static {
