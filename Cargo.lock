@@ -50,6 +50,7 @@ dependencies = [
  "basealloc-fixed",
  "basealloc-list",
  "basealloc-rbtree",
+ "basealloc-ring",
  "basealloc-rtree",
  "basealloc-sync",
  "basealloc-sys",

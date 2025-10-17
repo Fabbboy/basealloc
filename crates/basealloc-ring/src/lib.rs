@@ -48,7 +48,9 @@ impl Ring {
 
     let head = self.head.load(Ordering::Relaxed);
     buf[head] = val;
-    self.head.store(Self::next_idx(head, buf.len()), Ordering::Relaxed);
+    self
+      .head
+      .store(Self::next_idx(head, buf.len()), Ordering::Relaxed);
     self.len.fetch_add(1, Ordering::Relaxed);
 
     Ok(())
@@ -61,7 +63,9 @@ impl Ring {
 
     let tail = self.tail.load(Ordering::Relaxed);
     let val = &buf[tail];
-    self.tail.store(Self::next_idx(tail, buf.len()), Ordering::Relaxed);
+    self
+      .tail
+      .store(Self::next_idx(tail, buf.len()), Ordering::Relaxed);
     self.len.fetch_sub(1, Ordering::Relaxed);
 
     Some(val)

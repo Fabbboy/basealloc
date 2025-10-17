@@ -9,10 +9,6 @@ use basealloc_fixed::bump::{
 };
 use basealloc_list::List;
 use basealloc_rtree::RTree;
-use getset::{
-  Getters,
-  MutGetters,
-};
 use spin::Mutex;
 
 use crate::{
@@ -42,7 +38,6 @@ pub struct Bin {
   free_slabs: Option<NonNull<Slab>>,
   head: Option<NonNull<Slab>>,
   tail: Option<NonNull<Slab>>,
-  tree: RTree<Slab, FANOUT>,
 }
 
 impl Bin {
@@ -54,7 +49,6 @@ impl Bin {
       free_slabs: None,
       head: None,
       tail: None,
-      tree: RTree::new(chunk_size),
     }
   }
 

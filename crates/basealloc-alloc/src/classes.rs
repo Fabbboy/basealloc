@@ -30,6 +30,9 @@ pub const SCLASS_CUTOFF: usize = 1 << MAX_REGULAR;
 
 const LOOKUP_SHIFT: usize = WORD_TRAILING + 1;
 
+const CACHE_MIN: usize = 8;
+const CACHE_MAX: usize = 200;
+
 // Size class structure:
 // - QUANTUM (16): minimum allocation unit
 // - Tiny classes [0..NTINY): linear spacing by QUANTUM up to TINY_CUTOFF (1024)
@@ -49,9 +52,13 @@ pub struct SizeClass(pub usize, pub SizeClassIndex);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlabSize(pub usize);
 
-static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
-static TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CacheSize(pub usize);
+
+const CLASSES: [SizeClass; NSCLASSES] = generate_classes();
+const TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
 static PAGES: OnceLock<[SlabSize; NSCLASSES]> = OnceLock::new();
+static CACHE_SIZES: OnceLock<[CacheSize; NSCLASSES]> = OnceLock::new();
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -125,6 +132,35 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
     i += 1;
   }
   table
+}
+
+fn ensure_cache_sizes() -> &'static [CacheSize; NSCLASSES] {
+  CACHE_SIZES.get_or_init(|| generate_cache_sizes())
+}
+
+fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
+  let mut caches = [CacheSize(0); NSCLASSES];
+
+  let mut i = 0;
+  while i < NSCLASSES {
+    let SizeClass(size, _) = CLASSES[i];
+    let scale = SCLASS_CUTOFF / size;
+    let nslots = scale.clamp(CACHE_MIN, CACHE_MAX);
+
+    caches[i] = CacheSize(nslots * size);
+    i += 1;
+  }
+  caches
+}
+
+pub fn total_cache_size() -> usize {
+  let caches = ensure_cache_sizes();
+  caches.iter().map(|CacheSize(sz)| *sz).sum()
+}
+
+pub fn cache_for(class: SizeClassIndex) -> CacheSize {
+  let caches = ensure_cache_sizes();
+  caches[class.0]
 }
 
 #[inline]

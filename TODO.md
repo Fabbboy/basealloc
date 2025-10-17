@@ -1,0 +1,16 @@
+- [ ] Implement TCache
+- [ ] Get allocations and frees working
+- [ ] Implement Red-Black tree
+- [ ] Implement large allocations
+- [ ] Add freed large allocations to RB tree
+- [ ] Collect tail waste on bump allocator
+- [ ] Ensure Atomic's and Locks are used everywhere and Option's aren't just floating around
+- [ ] Ensure error enums dont use redundant `Error` suffixes in their variants
+- [ ] Split static code into lookup and arena specific code
+- [ ] Implement `thread_local!` and drop `rust-std` dependency
+- [ ] Generate header using `cbindgen` crate
+- [ ] Cleanup dependencies
+- [ ] Fix clippy warnings
+- [ ] Unify `BMStore` and `TCStore` into a `UnsafeStore<T>`
+- [ ] All alignment and other methods should return `PrimResult` instead of using `Option`. Error enums have to be adjusted accordingly.
+- [ ] Extract code from global alloc and create separate interface for arena specific allocators

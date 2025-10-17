@@ -1,17 +1,10 @@
 #![cfg_attr(not(test), no_std)]
 
 pub mod math;
+pub mod misc;
 pub mod prim;
 pub mod system;
 pub mod unix;
-
-pub trait Giveup {
-  type Failure: Default;
-
-  fn giveup(self) -> Result<Self, Self::Failure>
-  where
-    Self: Sized;
-}
 
 pub use system::GLOBAL_SYSTEM;
 

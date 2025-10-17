@@ -7,12 +7,10 @@ use core::{
 };
 
 use basealloc_sys::{
-  GLOBAL_SYSTEM,
-  Giveup,
-  system::{
+  misc::Giveup, system::{
     SysError,
     SysOption,
-  },
+  }, GLOBAL_SYSTEM
 };
 
 #[derive(Debug)]
