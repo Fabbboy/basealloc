@@ -20,12 +20,10 @@ use basealloc_alloc::{
     Entry,
     acquire_this_arena,
     lookup,
-    unregister_range,
   },
   tcache::acquire_tcache,
 };
 use basealloc_sync::lazy::LazyLock;
-use basealloc_sys::misc::Giveup;
 
 static FALLBACK: LazyLock<AtomicPtr<Arena>> =
   LazyLock::new(|| AtomicPtr::new(unsafe { Arena::new(usize::MAX, CHUNK_SIZE).unwrap().as_ptr() }));
@@ -96,11 +94,9 @@ unsafe impl GlobalAlloc for BaseAlloc {
         Entry::Class(_) => {
           todo!()
         }
-        &Entry::Large(mut lrg) => {
-          let extent = unsafe { lrg.as_mut() };
-          let _ = unregister_range(lrg);
-          let _ = unsafe { core::ptr::read(extent) }.giveup();
-          return;
+        &Entry::Large(lrg) => {
+          let arena = unsafe { Self::acquire_arena().as_mut() };
+          let _ = arena.deallocate_large(lrg);
         }
       }
     }

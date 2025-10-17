@@ -3,6 +3,10 @@ use core::{
   ptr::NonNull,
 };
 
+use basealloc_extent::{
+  Extent,
+  ExtentError,
+};
 use basealloc_fixed::bump::{
   Bump,
   BumpError,
@@ -17,14 +21,30 @@ use crate::{
   classes::{
     NSCLASSES,
     SizeClassIndex,
-    class_for,
   },
+  static_::{
+    LookupError,
+    register_large,
+    unregister_range,
+  },
+};
+
+use basealloc_sys::{
+  misc::Giveup,
+  prim::{
+    PrimError,
+    page_align,
+  },
+  system::SysOption,
 };
 
 #[derive(Debug)]
 pub enum ArenaError {
   BumpError(BumpError),
   BinError(BinError),
+  LookupError(LookupError),
+  ExtentError(ExtentError),
+  PrimError(PrimError),
 }
 
 pub type ArenaResult<T> = Result<T, ArenaError>;
@@ -54,41 +74,6 @@ impl Arena {
     Ok(unsafe { NonNull::new_unchecked(this_uninit) })
   }
 
-  /*  fn allocate_large(&self, layout: Layout) -> ArenaResult<NonNull<u8>> {
-    _ = layout;
-    todo!()
-  }
-
-  pub fn allocate(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
-    let class = class_for(layout.size());
-    if let None = class {
-      return self.allocate_large(layout);
-    }
-
-    let class = class.unwrap();
-    let bin = &mut self.bins[class.0];
-    bin
-      .allocate(&mut self.bump, layout)
-      .map_err(ArenaError::BinError)
-  } */
-
-  /*   fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
-    _ = ptr;
-    _ = layout;
-    todo!()
-  }
-
-  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
-    let class = class_for(layout.size());
-    if let None = class {
-      return self.deallocate_large(ptr, layout);
-    }
-
-    let class = class.unwrap();
-    let bin = &mut self.bins[class.0];
-    bin.deallocate(ptr, layout).map_err(ArenaError::BinError)
-  } */
-
   pub fn allocate(&mut self, sc: SizeClassIndex) -> ArenaResult<NonNull<u8>> {
     let bin = &mut self.bins[sc.0];
     bin.allocate(&mut self.bump).map_err(ArenaError::BinError)
@@ -108,8 +93,31 @@ impl Arena {
   }
 
   pub fn allocate_large(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
-    _ = layout;
-    todo!()
+    let extent_store = self
+      .bump
+      .create::<Extent>()
+      .map_err(ArenaError::BumpError)? as *mut Extent;
+
+    let pga_size = page_align(layout.size()).map_err(ArenaError::PrimError)?;
+
+    let extent = Extent::new(pga_size, SysOption::Commit).map_err(ArenaError::ExtentError)?;
+    let ptr = extent.as_ref().as_ptr() as *mut u8;
+    unsafe {
+      core::ptr::write(extent_store, extent);
+    }
+
+    let extent_nn = unsafe { NonNull::new_unchecked(extent_store) };
+    register_large(extent_nn).map_err(ArenaError::LookupError)?;
+
+    Ok(unsafe { NonNull::new_unchecked(ptr) })
+  }
+
+  pub fn deallocate_large(&mut self, mut extent: NonNull<Extent>) -> ArenaResult<()> {
+    unregister_range(extent).map_err(ArenaError::LookupError)?;
+    let extent = unsafe { extent.as_mut() };
+    let owning = unsafe { core::ptr::read(extent) };
+    let _ = owning.giveup();
+    Ok(())
   }
 }
 

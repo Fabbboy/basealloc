@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 basealloc-alloc = { workspace = true }
 basealloc-sync = { workspace = true }
-basealloc-sys = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.7.0"
