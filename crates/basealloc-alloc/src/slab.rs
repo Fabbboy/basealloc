@@ -10,7 +10,6 @@ use basealloc_bitmap::{
   Bitmap,
   BitmapError,
   BitmapWord,
-  BmStore,
 };
 use basealloc_extent::{
   Extent,
@@ -33,6 +32,8 @@ pub enum SlabError {
   ExtentError(ExtentError),
   LayoutError(LayoutError),
   BitmapError(BitmapError),
+  OutOfMemory,
+  InvalidPointer,
 }
 
 pub type SlabResult<T> = Result<T, SlabError>;
@@ -42,11 +43,11 @@ pub struct Slab {
   extent: Extent,
   link: Link<Self>,
   bitmap: Bitmap,
-  store: BmStore,
+  last: usize,
 }
 
 impl Slab {
-  fn new_bitmap(bump: &mut Bump, regions: usize) -> SlabResult<(Bitmap, BmStore)> {
+  fn new_bitmap(bump: &mut Bump, regions: usize) -> SlabResult<Bitmap> {
     let bm_needed = Bitmap::bytes(regions);
 
     let bm_layout = Layout::from_size_align(bm_needed, core::mem::align_of::<BitmapWord>())
@@ -57,10 +58,9 @@ impl Slab {
       core::slice::from_raw_parts_mut(bm_raw.as_ptr() as *mut BitmapWord, Bitmap::words(regions))
     };
 
-    let store = BmStore::from(&*bm_slice);
-    let bitmap = Bitmap::zero(store.as_slice(), regions).map_err(SlabError::BitmapError)?;
+    let bitmap = Bitmap::zero(bm_slice, regions).map_err(SlabError::BitmapError)?;
 
-    Ok((bitmap, store))
+    Ok(bitmap)
   }
 
   pub fn new(bump: &mut Bump, class: SizeClass, size: usize) -> SlabResult<NonNull<Slab>> {
@@ -70,20 +70,71 @@ impl Slab {
 
     let region_size = class.0;
     let regions = size / region_size;
-    let (bitmap, store) = Self::new_bitmap(bump, regions)?;
+    let bitmap = Self::new_bitmap(bump, regions)?;
 
     let tmp = Self {
       class,
       extent,
       link: Link::default(),
       bitmap,
-      store,
+      last: 0,
     };
 
     unsafe {
       slab.write(tmp);
     }
     Ok(unsafe { NonNull::new_unchecked(slab) })
+  }
+
+  fn update_last(&mut self, found: usize) {
+    self.last = (found + 1) % self.bitmap.bits();
+  }
+
+  fn ptr_at(&mut self, index: usize) -> NonNull<u8> {
+    let offset = index * self.class.0;
+    let eslice = self.extent.as_mut();
+    let ptr = unsafe { eslice.as_mut_ptr().add(offset) };
+    NonNull::new(ptr).unwrap()
+  }
+
+  fn has_ptr(&self, ptr: NonNull<u8>) -> bool {
+    let base_ptr = self.extent.as_ref().as_ptr();
+    let end_ptr = unsafe { base_ptr.add(self.extent.as_ref().len()) };
+    let p = ptr.as_ptr() as *const u8;
+    p >= base_ptr && p < end_ptr
+  }
+
+  fn index_for(&self, ptr: NonNull<u8>) -> Option<usize> {
+    if !self.has_ptr(ptr) {
+      return None;
+    }
+
+    let base_ptr = self.extent.as_ref().as_ptr() as *mut u8;
+    let offset = unsafe { ptr.as_ptr().offset_from(base_ptr) as usize };
+    Some(offset / self.class.0)
+  }
+
+  pub fn allocate(&mut self) -> SlabResult<NonNull<u8>> {
+    let slot = self.bitmap.find_fc(Some(self.last));
+    if let None = slot {
+      return Err(SlabError::OutOfMemory);
+    }
+
+    let slot = slot.unwrap();
+    self.bitmap.set(slot).map_err(SlabError::BitmapError)?;
+    self.update_last(slot);
+    Ok(self.ptr_at(slot))
+  }
+
+  pub fn deallocate(&mut self, ptr: NonNull<u8>) -> SlabResult<()> {
+    if !self.has_ptr(ptr) {
+      return Err(SlabError::InvalidPointer);
+    }
+
+    let index = self.index_for(ptr).unwrap();
+    self.bitmap.clear(index).map_err(SlabError::BitmapError)?;
+    self.update_last(index);
+    Ok(())
   }
 }
 
