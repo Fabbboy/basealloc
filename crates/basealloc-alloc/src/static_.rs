@@ -71,12 +71,12 @@ impl Static {
   }
 }
 
-pub struct SClassEntry {
+pub struct ClassEntry {
   bin: AtomicPtr<Bin>,
   slab: AtomicPtr<Slab>,
 }
 
-impl SClassEntry {
+impl ClassEntry {
   fn new(bin: NonNull<Bin>, slab: NonNull<Slab>) -> Self {
     Self {
       bin: AtomicPtr::new(bin.as_ptr()),
@@ -85,26 +85,26 @@ impl SClassEntry {
   }
 }
 
-pub enum LUEntry {
-  SClass(SClassEntry),
+pub enum Entry {
+  Class(ClassEntry),
   Large(AtomicPtr<Extent>),
 }
 
-impl LUEntry {
-  fn new_sc(entry: SClassEntry) -> Self {
-    LUEntry::SClass(entry)
+impl Entry {
+  fn new_sc(entry: ClassEntry) -> Self {
+    Entry::Class(entry)
   }
 
   fn new_large(extent: NonNull<Extent>) -> Self {
-    LUEntry::Large(AtomicPtr::new(extent.as_ptr()))
+    Entry::Large(AtomicPtr::new(extent.as_ptr()))
   }
 }
 
-unsafe impl Send for LUEntry {}
-unsafe impl Sync for LUEntry {}
+unsafe impl Send for Entry {}
+unsafe impl Sync for Entry {}
 
 struct Lookup {
-  tree: UnsafeCell<RTree<LUEntry, FANOUT>>,
+  tree: UnsafeCell<RTree<Entry, FANOUT>>,
 }
 
 impl Lookup {
@@ -114,11 +114,11 @@ impl Lookup {
     }
   }
 
-  pub const unsafe fn tree(&self) -> &RTree<LUEntry, FANOUT> {
+  pub const unsafe fn tree(&self) -> &RTree<Entry, FANOUT> {
     unsafe { &*self.tree.get() }
   }
 
-  pub const unsafe fn tree_mut(&self) -> &mut RTree<LUEntry, FANOUT> {
+  pub const unsafe fn tree_mut(&self) -> &mut RTree<Entry, FANOUT> {
     unsafe { &mut *self.tree.get() }
   }
 }
@@ -168,7 +168,7 @@ fn extent_range(extent: NonNull<Extent>) -> Result<Option<LookupRange>, LookupEr
   Ok(Some(LookupRange { start, end, step }))
 }
 
-fn rollback_range(tree: &mut RTree<LUEntry, FANOUT>, range: &LookupRange, upto: usize) {
+fn rollback_range(tree: &mut RTree<Entry, FANOUT>, range: &LookupRange, upto: usize) {
   let mut addr = range.start;
   while addr < upto {
     let _ = tree.remove(addr);
@@ -191,7 +191,7 @@ pub fn register_sc(
   let tree = unsafe { LOOKUP.tree_mut() };
 
   register_entries(tree, &range, || {
-    LUEntry::new_sc(SClassEntry::new(bin, slab))
+    Entry::new_sc(ClassEntry::new(bin, slab))
   })
 }
 
@@ -201,16 +201,16 @@ pub fn register_large(extent: NonNull<Extent>) -> Result<(), LookupError> {
   };
 
   let tree = unsafe { LOOKUP.tree_mut() };
-  register_entries(tree, &range, || LUEntry::new_large(extent))
+  register_entries(tree, &range, || Entry::new_large(extent))
 }
 
 fn register_entries<F>(
-  tree: &mut RTree<LUEntry, FANOUT>,
+  tree: &mut RTree<Entry, FANOUT>,
   range: &LookupRange,
   mut make_entry: F,
 ) -> Result<(), LookupError>
 where
-  F: FnMut() -> LUEntry,
+  F: FnMut() -> Entry,
 {
   let mut addr = range.start;
 
@@ -250,7 +250,7 @@ pub fn unregister_range(extent: NonNull<Extent>) -> Result<(), LookupError> {
   }
 }
 
-pub fn lookup(at: usize) -> Option<&'static LUEntry> {
+pub fn lookup(at: usize) -> Option<&'static Entry> {
   let key = page_align_down(at).ok()?;
   unsafe { LOOKUP.tree() }.lookup(key)
 }
@@ -380,7 +380,7 @@ mod tests {
     let interior = base + (ps / 2);
 
     let found = lookup(interior).expect("lookup interior");
-    assert!(matches!(found, LUEntry::SClass(_)));
+    assert!(matches!(found, Entry::Class(_)));
 
     unregister_range(extent_ptr).expect("unregister");
     assert!(lookup(interior).is_none());
@@ -405,14 +405,14 @@ mod tests {
     register_sc(extent_ptr, bin_ptr, slab_ptr).expect("register once");
 
     let base = extent.as_ref().as_ptr() as usize;
-    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
+    assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     unregister_range(extent_ptr).expect("unregister");
     assert!(lookup(base).is_none(), "mapping should be cleared");
 
     let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
     register_sc(extent_ptr, bin_ptr2, slab_ptr2).expect("register twice");
-    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
+    assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     unregister_range(extent_ptr).expect("final unregister");
 
@@ -437,14 +437,14 @@ mod tests {
     register_sc(extent_ptr, bin_ptr, slab_ptr).expect("initial register");
 
     let base = extent.as_ref().as_ptr() as usize;
-    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
+    assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
     let err = register_sc(extent_ptr, bin_ptr2, slab_ptr2)
       .expect_err("duplicate should fail");
     assert!(matches!(err, LookupError::Tree(RTreeError::AlreadyPresent)));
 
-    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
+    assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     unregister_range(extent_ptr).expect("unregister");
     assert!(lookup(base).is_none());

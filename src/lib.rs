@@ -16,7 +16,7 @@ use basealloc_alloc::{
   CHUNK_SIZE,
   arena::Arena,
   static_::{
-    LUEntry,
+    Entry,
     acquire_this_arena,
     lookup,
   },
@@ -36,13 +36,13 @@ impl BaseAlloc {
 
     if let Some(entry) = lookup(ptr as usize) {
       match entry {
-        LUEntry::SClass(_) => {
+        Entry::Class(_) => {
           if let Some(mut arena_ptr) = acquire_this_arena() {
             let arena = unsafe { arena_ptr.as_mut() };
             return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
           }
         }
-        LUEntry::Large(_) => {
+        Entry::Large(_) => {
           todo!("Implement large allocation size retrieval")
         }
       }
@@ -95,14 +95,14 @@ unsafe impl GlobalAlloc for BaseAlloc {
 
     if let Some(entry) = lookup(ptr as usize) {
       match entry {
-        LUEntry::SClass(_) => {
+        Entry::Class(_) => {
           if let Some(mut arena_ptr) = acquire_this_arena() {
             let arena = unsafe { arena_ptr.as_mut() };
             let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
             return;
           }
         }
-        LUEntry::Large(_) => {
+        Entry::Large(_) => {
           todo!("Implement large allocation deallocation")
         }
       }
