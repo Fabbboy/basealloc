@@ -8,14 +8,9 @@ use std::hint::black_box;
 
 use basealloc_alloc::{
   classes::{
-    QUANTUM,
-    SlabSize,
-    class_at,
-    class_for,
-    pages_for,
+    class_at, class_for, pages_for, SlabSize, QUANTUM
   },
-  slab::Slab,
-  static_::CHUNK_SIZE,
+  slab::Slab, CHUNK_SIZE,
 };
 use basealloc_fixed::bump::Bump;
 
