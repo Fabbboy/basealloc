@@ -2,7 +2,7 @@ use core::sync::atomic::{
   AtomicPtr,
   Ordering,
 };
-use std::ptr::NonNull;
+use std::{ptr::NonNull, sync::atomic::AtomicUsize};
 
 use basealloc_bitmap::{
   Bitmap,
@@ -38,6 +38,13 @@ thread_local! {
   pub static ARENA_GUARD: ArenaGuard = ArenaGuard;
 }
 
+static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
+static BM_LAST: AtomicUsize = AtomicUsize::new(0);
+static STATIC: LazyLock<Static> = LazyLock::new(|| {
+  let s = Static::new(&BM_STORE);
+  s
+});
+
 #[derive(Getters)]
 struct Static {
   #[getset(get = "pub")]
@@ -56,12 +63,6 @@ impl Static {
   }
 }
 
-static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
-static STATIC: LazyLock<Static> = LazyLock::new(|| {
-  let s = Static::new(&BM_STORE);
-  s
-});
-
 pub static EMAP: RTree<AtomicPtr<Extent>, FANOUT> = RTree::new(CHUNK_SIZE);
 
 fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
@@ -73,8 +74,11 @@ fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
 
 fn acquire_arena() -> Option<&'static mut Arena> {
   let static_ = &*STATIC;
-  let idx = static_.bitmap().find_fc(None)?;
+  let last = BM_LAST.load(Ordering::Acquire);
+  let idx = static_.bitmap().find_fc(Some(last))?;
   static_.bitmap().set(idx).ok()?;
+
+  BM_LAST.store((idx + 1) % ARENA_BMS, Ordering::Release);
 
   let arena_ptr = static_.arenas()[idx].load(Ordering::Acquire);
   if !arena_ptr.is_null() {
