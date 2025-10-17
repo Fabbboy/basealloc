@@ -208,7 +208,7 @@ impl Bitmap {
 
   fn iter_range<F>(&self, from_word: usize, to_word: usize, start_mask: usize, end_mask: usize, transform: F) -> Option<usize>
   where
-    F: Fn(usize) -> usize,
+    F: Fn(usize) -> usize + Copy,
   {
     let store = self.store.as_slice();
 
@@ -239,28 +239,17 @@ impl Bitmap {
   }
 
   pub fn find_fs(&self, start: Option<usize>) -> Option<usize> {
-    let start_bit = start.unwrap_or(0);
-    if start_bit >= self.bits {
-      return None;
-    }
-
-    let start_word = word_index(start_bit);
-    let start_offset = bit_index(start_bit);
-    let last_word = word_index(self.bits.saturating_sub(1));
-
-    if let Some(result) = self.iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, |v| v) {
-      return Some(result);
-    }
-
-    if start_bit > 0 && start_word > 0 {
-      let end_mask = (1usize << start_offset) - 1;
-      self.iter_range(0, start_word - 1, usize::MAX, end_mask, |v| v)
-    } else {
-      None
-    }
+    self.find_bit(start, |v| v)
   }
 
   pub fn find_fc(&self, start: Option<usize>) -> Option<usize> {
+    self.find_bit(start, |v| v ^ usize::MAX)
+  }
+
+  fn find_bit<F>(&self, start: Option<usize>, transform: F) -> Option<usize>
+  where
+    F: Fn(usize) -> usize + Copy,
+  {
     let start_bit = start.unwrap_or(0);
     if start_bit >= self.bits {
       return None;
@@ -270,16 +259,28 @@ impl Bitmap {
     let start_offset = bit_index(start_bit);
     let last_word = word_index(self.bits.saturating_sub(1));
 
-    if let Some(result) = self.iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, |v| v ^ usize::MAX) {
-      return Some(result);
+    self
+      .iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, transform)
+      .or_else(|| self.wrap_search(start_bit, start_word, start_offset, transform))
+  }
+
+  fn wrap_search<F>(&self, start_bit: usize, start_word: usize, start_offset: usize, transform: F) -> Option<usize>
+  where
+    F: Fn(usize) -> usize + Copy,
+  {
+    if start_bit == 0 {
+      return None;
     }
 
-    if start_bit > 0 && start_word > 0 {
-      let end_mask = (1usize << start_offset) - 1;
-      self.iter_range(0, start_word - 1, usize::MAX, end_mask, |v| v ^ usize::MAX)
+    let wrap_end_mask = (1usize << start_offset).wrapping_sub(1);
+    let wrap_to_word = start_word;
+    let wrap_start_mask = if wrap_to_word == 0 {
+      wrap_end_mask
     } else {
-      None
-    }
+      usize::MAX
+    };
+
+    self.iter_range(0, wrap_to_word, wrap_start_mask, wrap_end_mask, transform)
   }
 
   #[inline]

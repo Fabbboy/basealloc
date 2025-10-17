@@ -78,6 +78,20 @@ fn test_search_operations() {
 }
 
 #[test]
+fn test_find_fc_wraps_within_first_word() {
+  let storage: [AtomicUsize; 1] = [AtomicUsize::new(0)];
+  // Only use the lower 32 bits to match the slab test scenario
+  let bitmap = Bitmap::zero(&storage, 32).unwrap();
+
+  for idx in 1..32 {
+    bitmap.set(idx).unwrap();
+  }
+
+  // With all bits from 1..=31 set, the allocator should wrap and reuse slot 0
+  assert_eq!(bitmap.find_fc(Some(31)), Some(0));
+}
+
+#[test]
 fn test_error_handling() {
   let storage: [AtomicUsize; 1] = [AtomicUsize::new(0)];
   let bits = storage.len() * usize::BITS as usize;
