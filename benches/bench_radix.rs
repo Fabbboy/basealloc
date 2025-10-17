@@ -14,7 +14,7 @@ fn bench_radix_operations(c: &mut Criterion) {
       || BenchTree::new(4096),
       |mut tree| {
         for i in 0..100 {
-          let _ = tree.insert(i, Some(i));
+          let _ = tree.insert(i, i);
         }
         black_box(&tree);
       },
@@ -27,7 +27,7 @@ fn bench_radix_operations(c: &mut Criterion) {
       || {
         let mut tree = BenchTree::new(4096);
         for i in 0..100 {
-          let _ = tree.insert(i, Some(i * 2));
+          let _ = tree.insert(i, i * 2);
         }
         tree
       },
@@ -49,7 +49,7 @@ fn bench_radix_operations(c: &mut Criterion) {
       || {
         let mut tree = BenchTree::new(4096);
         for i in 0..100 {
-          let _ = tree.insert(i, Some(i));
+          let _ = tree.insert(i, i);
         }
         tree
       },

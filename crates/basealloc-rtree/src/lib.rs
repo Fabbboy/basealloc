@@ -117,14 +117,9 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     }
   }
 
-  pub fn insert(&mut self, key: usize, val: Option<T>) -> RTreeResult<()> {
-    let Some(value) = val else {
-      let _ = self.remove(key);
-      return Ok(());
-    };
-
+  pub fn insert(&mut self, key: usize, val: T) -> RTreeResult<()> {
     let leaf = self.ensure_leaf(key)?;
-    Self::store(leaf, value)
+    Self::store(leaf, val)
   }
 
   pub fn lookup(&self, key: usize) -> Option<&T> {

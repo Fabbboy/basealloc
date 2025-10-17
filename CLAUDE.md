@@ -41,10 +41,11 @@ The allocator is designed to be standalone without fallback to libc malloc, glob
 - `ListIter::from(&start_node)` - iterate without removing
 - `ListDrainer::from(&start_node)` - iterate and remove each node
 
-**Tree Maps and Dictionaries:**
-- Not yet implemented - will be added for size-class mapping and arena management
-- Should follow same intrusive pattern for memory efficiency
-- Consider red-black trees or B-trees for ordered mappings
+- **Radix Tree (`basealloc-rtree`):**
+  - `RTree::insert(key, value)` now always stores a concrete `T`; use `remove(key)` to clear entries.
+  - Nodes still allocate from a `Bump`; duplicate inserts return `RTreeError::AlreadyPresent`.
+  - Benchmarks and tests expect the non-optional insert signature.
+  - Keep fanout a power of two; `FANOUT.trailing_zeros()` drives level calculations.
 
 ## Coding Rules
 
@@ -68,7 +69,7 @@ The allocator is designed to be standalone without fallback to libc malloc, glob
 
 **Code Quality:**
 - **NEVER ignore Clippy warnings** - address ALL warnings, even trivial ones
-- Follow Clippy rules: max 7 function arguments, max 50 lines per function, no unnecessary Box/Vec usage (configured in clippy.toml)
+- Follow Clippy rules: max 7 function arguments, max **25** lines per function, no unnecessary Box/Vec usage (configured in clippy.toml)
 - Use rustfmt with project settings: 2-space tabs, 100 char width, vertical imports (rustfmt.toml)
 - Fix bugs in implementation, never work around them by changing tests or examples
 - Use Rust ergonomics: Option/Result combinators, iterators, closures, pattern matching, From/TryFrom, Into/TryInto, Deref/DerefMut, Index/IndexMut
