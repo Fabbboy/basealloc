@@ -9,4 +9,3 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 basealloc = { workspace = true }
-libc = { workspace = true }

@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 basealloc-alloc = { workspace = true }
-libc = { workspace = true, optional = true }
 basealloc-sync = { workspace = true }
 
 [dev-dependencies]
