@@ -1,6 +1,5 @@
 use crate::math::{
-  align_up,
-  is_aligned,
+  align_down, align_up, is_aligned
 };
 use core::sync::atomic::{
   AtomicBool,
@@ -61,6 +60,10 @@ pub fn page_size() -> usize {
 
 pub fn page_align(value: usize) -> PrimResult<usize> {
   align_up(value, page_size()).ok_or(PrimError::Overflow)
+}
+
+pub fn page_align_down(value: usize) -> PrimResult<usize> {
+  align_down(value, page_size()).ok_or(PrimError::Overflow)
 }
 
 pub fn is_page_aligned(value: usize) -> PrimResult<bool> {
