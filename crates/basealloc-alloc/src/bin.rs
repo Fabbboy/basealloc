@@ -10,9 +10,9 @@ use basealloc_fixed::bump::{
 use spin::Mutex;
 
 use crate::classes::{
-  SlabSize,
   SizeClass,
   SizeClassIndex,
+  SlabSize,
   class_at,
   pages_for,
 };
@@ -41,6 +41,12 @@ impl Bin {
   }
 
   pub fn allocate(&mut self, bump: &mut Bump, layout: Layout) -> BinResult<NonNull<u8>> {
+    _ = layout;
+    todo!()
+  }
+
+  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> BinResult<()> {
+    _ = ptr;
     _ = layout;
     todo!()
   }

@@ -72,21 +72,21 @@ impl Arena {
       .map_err(ArenaError::BinError)
   }
 
-  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) {
+  fn deallocate_large(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()>  {
     _ = ptr;
     _ = layout;
     todo!()
   }
 
-  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> ArenaResult<()> {
     let class = class_for(layout.size());
     if let None = class {
       return self.deallocate_large(ptr, layout);
     }
 
     let class = class.unwrap();
-    let _bin = &mut self.bins[class.0];
-    todo!()
+    let bin = &mut self.bins[class.0];
+    bin.deallocate(ptr, layout).map_err(ArenaError::BinError)
   }
 
   pub fn sizeof(&self, ptr: NonNull<u8>) -> Option<usize> {
