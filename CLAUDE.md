@@ -46,6 +46,9 @@ The allocator is designed to be standalone without fallback to libc malloc, glob
   - Nodes still allocate from a `Bump`; duplicate inserts return `RTreeError::AlreadyPresent`.
   - Benchmarks and tests expect the non-optional insert signature.
   - Keep fanout a power of two; `FANOUT.trailing_zeros()` drives level calculations.
+- **Extent Map (`basealloc-alloc::static_`):**
+  - Extents are registered one system page at a time via `register_extent`/`unregister_extent` without allocating extra memory.
+  - `lookup_arena(addr)` aligns `addr` down to the page boundary and returns the owning `Arena` when present.
 
 ## Coding Rules
 

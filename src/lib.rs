@@ -17,6 +17,7 @@ use basealloc_alloc::{
   static_::{
     CHUNK_SIZE,
     acquire_this_arena,
+    lookup_arena,
   },
 };
 use basealloc_sync::lazy::LazyLock;
@@ -32,12 +33,18 @@ impl BaseAlloc {
       return None;
     }
 
-    if let Some(mut arena_ptr) = acquire_this_arena() {
+    if let Some(mut arena_ptr) = lookup_arena(ptr as usize) {
       let arena = unsafe { arena_ptr.as_mut() };
       return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
     }
 
-    None
+    let fallback = FALLBACK.load(Ordering::Acquire);
+    if fallback.is_null() {
+      return None;
+    }
+
+    let arena = unsafe { &mut *fallback };
+    arena.sizeof(unsafe { NonNull::new_unchecked(ptr) })
   }
 
   pub fn is_invalid(ptr: *mut u8) -> bool {
@@ -76,12 +83,18 @@ unsafe impl GlobalAlloc for BaseAlloc {
       return;
     }
 
-    if let Some(mut arena_ptr) = acquire_this_arena() {
+    if let Some(mut arena_ptr) = lookup_arena(ptr as usize) {
       let arena = unsafe { arena_ptr.as_mut() };
-      arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
+      let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
       return;
     }
 
-    todo!("no fallback yet");
+    let fallback = FALLBACK.load(Ordering::Acquire);
+    if fallback.is_null() {
+      return;
+    }
+
+    let arena = unsafe { &mut *fallback };
+    let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
   }
 }

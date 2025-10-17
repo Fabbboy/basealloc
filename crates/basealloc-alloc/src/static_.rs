@@ -132,32 +132,10 @@ struct PageRange {
 }
 
 impl PageRange {
-  fn iter(&self) -> PageIter {
-    PageIter {
-      current: self.start,
-      end: self.end,
-      step: self.step,
-    }
-  }
-}
-
-struct PageIter {
-  current: usize,
-  end: usize,
-  step: usize,
-}
-
-impl Iterator for PageIter {
-  type Item = usize;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    if self.current >= self.end {
-      return None;
-    }
-
-    let addr = self.current;
-    self.current = self.current.saturating_add(self.step);
-    Some(addr)
+  fn next_addr(&self, current: usize) -> Result<usize, LookupError> {
+    current
+      .checked_add(self.step)
+      .ok_or(LookupError::RangeOverflow)
   }
 }
 
@@ -179,9 +157,14 @@ fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<PageRange>, Looku
   Ok(Some(PageRange { start, end, step }))
 }
 
-fn rollback_pages(tree: &mut RTree<LUEntry, FANOUT>, pages: &[usize]) {
-  for &key in pages {
-    let _ = tree.remove(key);
+fn rollback_range(tree: &mut RTree<LUEntry, FANOUT>, range: &PageRange, upto: usize) {
+  let mut addr = range.start;
+  while addr < upto {
+    let _ = tree.remove(addr);
+    addr = match range.next_addr(addr) {
+      Ok(next) => next,
+      Err(_) => break,
+    };
   }
 }
 
@@ -191,13 +174,15 @@ pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result
   };
 
   let tree = unsafe { LOOKUP.tree_mut() };
-  let mut inserted = Vec::new();
+  let mut addr = range.start;
 
-  for addr in range.iter() {
+  while addr < range.end {
     match tree.insert(addr, LUEntry::new(owner)) {
-      Ok(()) => inserted.push(addr),
+      Ok(()) => {
+        addr = range.next_addr(addr)?;
+      }
       Err(err) => {
-        rollback_pages(tree, &inserted);
+        rollback_range(tree, &range, addr);
         return Err(LookupError::Tree(err));
       }
     }
@@ -213,9 +198,11 @@ pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
 
   let tree = unsafe { LOOKUP.tree_mut() };
   let mut removed_any = false;
+  let mut addr = range.start;
 
-  for addr in range.iter() {
+  while addr < range.end {
     removed_any |= tree.remove(addr).is_some();
+    addr = range.next_addr(addr)?;
   }
 
   if removed_any {
@@ -331,6 +318,64 @@ mod tests {
 
     unsafe {
       drop_in_place(owner.as_ptr());
+    }
+  }
+
+  #[test]
+  fn unregister_allows_reregistration() {
+    let ps = page_size();
+
+    let mut extent = Extent::new(ps, SysOption::Reserve).expect("reserve extent");
+    let extent_ptr = NonNull::from(&mut extent);
+
+    let first_arena = unsafe { Arena::new(3, CHUNK_SIZE).expect("first arena") };
+    let second_arena = unsafe { Arena::new(4, CHUNK_SIZE).expect("second arena") };
+
+    register_extent(extent_ptr, first_arena).expect("register once");
+
+    let base = extent.as_ref().as_ptr() as usize;
+    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+
+    unregister_extent(extent_ptr).expect("unregister");
+    assert!(lookup_arena(base).is_none(), "mapping should be cleared");
+
+    register_extent(extent_ptr, second_arena).expect("register twice");
+    assert_eq!(lookup_arena(base).unwrap().as_ptr(), second_arena.as_ptr());
+
+    unregister_extent(extent_ptr).expect("final unregister");
+
+    unsafe {
+      drop_in_place(first_arena.as_ptr());
+      drop_in_place(second_arena.as_ptr());
+    }
+  }
+
+  #[test]
+  fn failed_registration_leaves_existing_mapping_intact() {
+    let ps = page_size();
+
+    let mut extent = Extent::new(ps, SysOption::Reserve).expect("reserve extent");
+    let extent_ptr = NonNull::from(&mut extent);
+
+    let first_arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("first arena") };
+    let second_arena = unsafe { Arena::new(6, CHUNK_SIZE).expect("second arena") };
+
+    register_extent(extent_ptr, first_arena).expect("initial register");
+
+    let base = extent.as_ref().as_ptr() as usize;
+    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+
+    let err = register_extent(extent_ptr, second_arena).expect_err("duplicate should fail");
+    assert!(matches!(err, LookupError::Tree(RTreeError::AlreadyPresent)));
+
+    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+
+    unregister_extent(extent_ptr).expect("unregister");
+    assert!(lookup_arena(base).is_none());
+
+    unsafe {
+      drop_in_place(first_arena.as_ptr());
+      drop_in_place(second_arena.as_ptr());
     }
   }
 }
