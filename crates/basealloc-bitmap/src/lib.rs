@@ -21,6 +21,26 @@ pub type BitmapWord = AtomicUsize;
 
 const USIZE_BITS: usize = usize::BITS as usize;
 
+#[inline(always)]
+const fn word_index(bit: usize) -> usize {
+  bit / USIZE_BITS
+}
+
+#[inline(always)]
+const fn bit_index(bit: usize) -> usize {
+  bit % USIZE_BITS
+}
+
+#[inline(always)]
+const fn bit_mask(bit: usize) -> usize {
+  1usize << bit_index(bit)
+}
+
+#[inline(always)]
+const fn mask_from(start_bit: usize) -> usize {
+  usize::MAX << start_bit
+}
+
 #[derive(Debug)]
 pub struct BmStore {
   ptr: NonNull<BitmapWord>,
@@ -86,9 +106,7 @@ impl Bitmap {
         size: self.bits,
       });
     }
-    let word_index = index / USIZE_BITS;
-    let bit_index = index % USIZE_BITS;
-    Ok((word_index, bit_index))
+    Ok((word_index(index), bit_index(index)))
   }
 
   pub fn zero(store: &[BitmapWord], bits: usize) -> Result<Self, BitmapError> {
@@ -140,30 +158,28 @@ impl Bitmap {
 
   #[inline]
   pub fn set(&self, index: usize) -> Result<(), BitmapError> {
-    let (word_index, bit_index) = self.position(index)?;
-    let mask = 1usize << bit_index;
+    self.position(index)?;
     let store = self.store.as_slice();
-    store[word_index].fetch_or(mask, Ordering::Relaxed);
+    store[word_index(index)].fetch_or(bit_mask(index), Ordering::Relaxed);
     self.used.fetch_add(1, Ordering::Relaxed);
     Ok(())
   }
 
   #[inline]
   pub fn clear(&self, index: usize) -> Result<(), BitmapError> {
-    let (word_index, bit_index) = self.position(index)?;
-    let mask = !(1usize << bit_index);
+    self.position(index)?;
     let store = self.store.as_slice();
-    store[word_index].fetch_and(mask, Ordering::Relaxed);
+    store[word_index(index)].fetch_and(!bit_mask(index), Ordering::Relaxed);
     self.used.fetch_sub(1, Ordering::Relaxed);
     Ok(())
   }
 
   #[inline]
   pub fn get(&self, index: usize) -> Result<bool, BitmapError> {
-    let (word_index, bit_index) = self.position(index)?;
+    self.position(index)?;
     let store = self.store.as_slice();
-    let value = store[word_index].load(Ordering::Relaxed);
-    Ok((value & (1usize << bit_index)) != 0)
+    let value = store[word_index(index)].load(Ordering::Relaxed);
+    Ok((value & bit_mask(index)) != 0)
   }
 
   pub fn clear_all(&self) {
@@ -190,13 +206,30 @@ impl Bitmap {
     self.used.store(self.bits, Ordering::Relaxed);
   }
 
-  pub fn find_fs(&self) -> Option<usize> {
+  fn iter_range<F>(&self, from_word: usize, to_word: usize, start_mask: usize, end_mask: usize, transform: F) -> Option<usize>
+  where
+    F: Fn(usize) -> usize,
+  {
     let store = self.store.as_slice();
-    for (word_index, word) in store.iter().enumerate() {
-      let value = word.load(Ordering::Relaxed);
-      if value != 0 {
-        let bit_offset = value.trailing_zeros() as usize;
-        let global_index = word_index * USIZE_BITS + bit_offset;
+
+    for idx in from_word..=to_word {
+      if idx >= store.len() {
+        break;
+      }
+
+      let value = transform(store[idx].load(Ordering::Relaxed));
+      let mask = if idx == from_word {
+        start_mask
+      } else if idx == to_word {
+        end_mask
+      } else {
+        usize::MAX
+      };
+
+      let masked = value & mask;
+      if masked != 0 {
+        let bit_offset = masked.trailing_zeros() as usize;
+        let global_index = idx * USIZE_BITS + bit_offset;
         if global_index < self.bits {
           return Some(global_index);
         }
@@ -205,20 +238,46 @@ impl Bitmap {
     None
   }
 
-  pub fn find_fc(&self) -> Option<usize> {
-    let store = self.store.as_slice();
-    for (word_index, word) in store.iter().enumerate() {
-      let value = word.load(Ordering::Relaxed);
-      let inverted = value ^ usize::MAX;
-      if inverted != 0 {
-        let bit_offset = inverted.trailing_zeros() as usize;
-        let global_index = word_index * USIZE_BITS + bit_offset;
-        if global_index < self.bits {
-          return Some(global_index);
-        }
-      }
+  pub fn find_fs(&self, start: Option<usize>) -> Option<usize> {
+    let start_bit = start.unwrap_or(0);
+    if start_bit >= self.bits {
+      return None;
     }
-    None
+
+    let start_word = word_index(start_bit);
+    let start_offset = bit_index(start_bit);
+    let last_word = word_index(self.bits.saturating_sub(1));
+
+    if let Some(result) = self.iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, |v| v) {
+      return Some(result);
+    }
+
+    if start.is_some() && start_word > 0 {
+      self.iter_range(0, start_word, usize::MAX, !mask_from(start_offset), |v| v)
+    } else {
+      None
+    }
+  }
+
+  pub fn find_fc(&self, start: Option<usize>) -> Option<usize> {
+    let start_bit = start.unwrap_or(0);
+    if start_bit >= self.bits {
+      return None;
+    }
+
+    let start_word = word_index(start_bit);
+    let start_offset = bit_index(start_bit);
+    let last_word = word_index(self.bits.saturating_sub(1));
+
+    if let Some(result) = self.iter_range(start_word, last_word, mask_from(start_offset), usize::MAX, |v| v ^ usize::MAX) {
+      return Some(result);
+    }
+
+    if start.is_some() && start_word > 0 {
+      self.iter_range(0, start_word, usize::MAX, !mask_from(start_offset), |v| v ^ usize::MAX)
+    } else {
+      None
+    }
   }
 
   #[inline]

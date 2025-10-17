@@ -58,21 +58,23 @@ fn test_search_operations() {
   let bits = storage.len() * usize::BITS as usize;
   let bitmap = Bitmap::zero(&storage, bits).unwrap();
 
-  assert_eq!(bitmap.find_fs(), None);
-  assert_eq!(bitmap.find_fc(), Some(0));
+  assert_eq!(bitmap.find_fs(None), None);
+  assert_eq!(bitmap.find_fc(None), Some(0));
 
   bitmap.set(5).unwrap();
   bitmap.set(65).unwrap();
 
-  assert_eq!(bitmap.find_fs(), Some(5));
-  assert_eq!(bitmap.find_fc(), Some(0));
+  assert_eq!(bitmap.find_fs(None), Some(5));
+  assert_eq!(bitmap.find_fc(None), Some(0));
+  assert_eq!(bitmap.find_fs(Some(10)), Some(65));
+  assert_eq!(bitmap.find_fc(Some(1)), Some(1));
 
   bitmap.set(0).unwrap();
-  assert_eq!(bitmap.find_fc(), Some(1));
+  assert_eq!(bitmap.find_fc(None), Some(1));
 
   bitmap.set_all();
-  assert_eq!(bitmap.find_fc(), None);
-  assert_eq!(bitmap.find_fs(), Some(0));
+  assert_eq!(bitmap.find_fc(None), None);
+  assert_eq!(bitmap.find_fs(None), Some(0));
 }
 
 #[test]
@@ -114,7 +116,7 @@ fn test_partial_word_handling() {
   }
 
   bitmap.set(63).unwrap();
-  assert_eq!(bitmap.find_fs(), Some(63));
+  assert_eq!(bitmap.find_fs(None), Some(63));
 }
 
 #[test]
@@ -132,7 +134,7 @@ fn test_usize_word_type() {
   let single_bitmap = Bitmap::zero(&single_storage, single_bits).unwrap();
   single_bitmap.set(9).unwrap();
   assert!(single_bitmap.get(9).unwrap());
-  assert_eq!(single_bitmap.find_fs(), Some(9));
+  assert_eq!(single_bitmap.find_fs(None), Some(9));
 }
 
 #[test]
@@ -143,16 +145,16 @@ fn test_zero_and_one_constructors() {
   let bits = storage.len() * usize::BITS as usize;
   let bitmap_zero = Bitmap::zero(&storage, bits).unwrap();
   assert!(bitmap_zero.is_clear());
-  assert_eq!(bitmap_zero.find_fs(), None);
-  assert_eq!(bitmap_zero.find_fc(), Some(0));
+  assert_eq!(bitmap_zero.find_fs(None), None);
+  assert_eq!(bitmap_zero.find_fc(None), Some(0));
 
   // Test one constructor
   let storage2: [AtomicUsize; 2] = [AtomicUsize::new(0), AtomicUsize::new(0)];
   let bits2 = storage2.len() * usize::BITS as usize;
   let bitmap_one = Bitmap::one(&storage2, bits2).unwrap();
   assert!(!bitmap_one.is_clear());
-  assert_eq!(bitmap_one.find_fs(), Some(0));
-  assert_eq!(bitmap_one.find_fc(), None);
+  assert_eq!(bitmap_one.find_fs(None), Some(0));
+  assert_eq!(bitmap_one.find_fc(None), None);
 }
 
 #[test]

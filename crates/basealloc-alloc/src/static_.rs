@@ -73,7 +73,7 @@ fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
 
 fn acquire_arena() -> Option<&'static mut Arena> {
   let static_ = &*STATIC;
-  let idx = static_.bitmap().find_fc()?;
+  let idx = static_.bitmap().find_fc(None)?;
   static_.bitmap().set(idx).ok()?;
 
   let arena_ptr = static_.arenas()[idx].load(Ordering::Acquire);
