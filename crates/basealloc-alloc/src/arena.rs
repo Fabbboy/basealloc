@@ -47,7 +47,7 @@ impl Arena {
 
     let bins = core::array::from_fn(|i| {
       let class = SizeClassIndex(i);
-      Bin::new(class)
+      Bin::new(class, chunk_size)
     });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
 
@@ -98,10 +98,11 @@ impl Arena {
 #[cfg(test)]
 mod tests {
   use core::ptr::drop_in_place;
+ 
 
-  use crate::static_::CHUNK_SIZE;
+  use crate::CHUNK_SIZE;
 
-  use super::*;
+use super::*;
 
   #[test]
   fn test_arena_creation() {

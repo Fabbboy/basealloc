@@ -157,16 +157,9 @@ impl HasLink for Slab {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{
-    classes::{
-      QUANTUM,
-      SlabSize,
-      class_at,
-      class_for,
-      pages_for,
-    },
-    static_::CHUNK_SIZE,
-  };
+  use crate::{classes::{
+    class_at, class_for, pages_for, SlabSize, QUANTUM
+  }, CHUNK_SIZE};
 
   #[test]
   fn allocate_deallocate_reuse() {
