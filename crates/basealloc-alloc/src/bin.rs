@@ -56,8 +56,7 @@ impl Bin {
     todo!()
   }
 
-  pub fn deallocate(&mut self, ptr: NonNull<u8>) -> BinResult<()> {
-    _ = ptr;
+  pub fn deallocate(&mut self, ptr: NonNull<u8>, slab: NonNull<Slab>) -> BinResult<()> {
     todo!()
   }
 }

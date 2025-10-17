@@ -22,6 +22,7 @@ use crate::{
     NSCLASSES,
     SizeClassIndex,
   },
+  slab::Slab,
   static_::{
     LookupError,
     register_large,
@@ -118,6 +119,16 @@ impl Arena {
     let owning = unsafe { core::ptr::read(extent) };
     let _ = owning.giveup();
     Ok(())
+  }
+
+  pub fn deallocate(
+    &mut self,
+    ptr: NonNull<u8>,
+    sc: SizeClassIndex,
+    slab: NonNull<Slab>,
+  ) -> ArenaResult<()> {
+    let bin = &mut self.bins[sc.0];
+    bin.deallocate(ptr, slab).map_err(ArenaError::BinError)
   }
 }
 
