@@ -71,17 +71,17 @@ impl Static {
   }
 }
 
+#[derive(Getters)]
 pub struct ClassEntry {
-  bin: AtomicPtr<Bin>,
-  slab: AtomicPtr<Slab>,
+  #[getset(get = "pub")]
+  bin: NonNull<Bin>,
+  #[getset(get = "pub")]
+  slab: NonNull<Slab>,
 }
 
 impl ClassEntry {
   fn new(bin: NonNull<Bin>, slab: NonNull<Slab>) -> Self {
-    Self {
-      bin: AtomicPtr::new(bin.as_ptr()),
-      slab: AtomicPtr::new(slab.as_ptr()),
-    }
+    Self { bin, slab }
   }
 }
 
@@ -190,9 +190,7 @@ pub fn register_sc(
 
   let tree = unsafe { LOOKUP.tree_mut() };
 
-  register_entries(tree, &range, || {
-    Entry::new_sc(ClassEntry::new(bin, slab))
-  })
+  register_entries(tree, &range, || Entry::new_sc(ClassEntry::new(bin, slab)))
 }
 
 pub fn register_large(extent: NonNull<Extent>) -> Result<(), LookupError> {
@@ -340,9 +338,8 @@ mod tests {
   use basealloc_sys::prelude::SysOption;
   use core::ptr::drop_in_place;
   use std::sync::Mutex;
-  
-  static TEST_LOCK: Mutex<()> = Mutex::new(());
 
+  static TEST_LOCK: Mutex<()> = Mutex::new(());
 
   fn create_test_bin_and_slab() -> (NonNull<Bin>, NonNull<Slab>) {
     let mut bump = Bump::new(CHUNK_SIZE);
@@ -440,8 +437,7 @@ mod tests {
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
 
     let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
-    let err = register_sc(extent_ptr, bin_ptr2, slab_ptr2)
-      .expect_err("duplicate should fail");
+    let err = register_sc(extent_ptr, bin_ptr2, slab_ptr2).expect_err("duplicate should fail");
     assert!(matches!(err, LookupError::Tree(RTreeError::AlreadyPresent)));
 
     assert!(matches!(lookup(base).unwrap(), Entry::Class(_)));
