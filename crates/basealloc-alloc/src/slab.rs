@@ -5,7 +5,6 @@ use core::{
   },
   ptr::NonNull,
 };
-use std::sync::atomic::Ordering;
 
 use basealloc_bitmap::{
   Bitmap,
