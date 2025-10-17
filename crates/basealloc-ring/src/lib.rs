@@ -10,31 +10,19 @@ pub enum RingError<T> {
   Full(T),
 }
 
-pub struct Ring<T, const N: usize>
-where
-  T: Copy,
-{
-  buf: [T; N],
+pub struct Ring {
   head: AtomicUsize,
   tail: AtomicUsize,
   len: AtomicUsize,
 }
 
-impl<T, const N: usize> Ring<T, N>
-where
-  T: Copy,
-{
-  pub const fn new(init: T) -> Self {
+impl Ring {
+  pub const fn new() -> Self {
     Self {
-      buf: [init; N],
       head: AtomicUsize::new(0),
       tail: AtomicUsize::new(0),
       len: AtomicUsize::new(0),
     }
-  }
-
-  pub const fn capacity(&self) -> usize {
-    N
   }
 
   pub fn len(&self) -> usize {
@@ -45,35 +33,35 @@ where
     self.len() == 0
   }
 
-  pub fn is_full(&self) -> bool {
-    self.len() == N
+  pub fn is_full<T>(&self, buf: &[T]) -> bool {
+    self.len() == buf.len()
   }
 
-  fn next_idx(current: usize) -> usize {
-    (current + 1) % N
+  fn next_idx(current: usize, capacity: usize) -> usize {
+    (current + 1) % capacity
   }
 
-  pub fn push(&mut self, val: T) -> Result<(), RingError<T>> {
-    if self.is_full() {
+  pub fn push<T>(&self, buf: &mut [T], val: T) -> Result<(), RingError<T>> {
+    if self.is_full(buf) {
       return Err(RingError::Full(val));
     }
 
     let head = self.head.load(Ordering::Relaxed);
-    self.buf[head] = val;
-    self.head.store(Self::next_idx(head), Ordering::Relaxed);
+    buf[head] = val;
+    self.head.store(Self::next_idx(head, buf.len()), Ordering::Relaxed);
     self.len.fetch_add(1, Ordering::Relaxed);
 
     Ok(())
   }
 
-  pub fn pop(&mut self) -> Option<T> {
+  pub fn pop<'a, T>(&self, buf: &'a [T]) -> Option<&'a T> {
     if self.is_empty() {
       return None;
     }
 
     let tail = self.tail.load(Ordering::Relaxed);
-    let val = self.buf[tail];
-    self.tail.store(Self::next_idx(tail), Ordering::Relaxed);
+    let val = &buf[tail];
+    self.tail.store(Self::next_idx(tail, buf.len()), Ordering::Relaxed);
     self.len.fetch_sub(1, Ordering::Relaxed);
 
     Some(val)
