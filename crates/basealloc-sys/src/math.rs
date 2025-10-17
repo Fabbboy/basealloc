@@ -20,6 +20,14 @@ pub const fn align_up(value: usize, align: usize) -> Option<usize> {
   None
 }
 
+pub const fn align_down(value: usize, align: usize) -> Option<usize> {
+  if !align.is_power_of_two() {
+    return None;
+  }
+
+  Some(value & !(align - 1))
+}
+
 pub fn align_ptr<T>(ptr: NonNull<T>, align: usize) -> Option<NonNull<T>> {
   let addr = ptr.as_ptr() as usize;
   let aligned_addr = align_up(addr, align)?;
@@ -121,6 +129,20 @@ mod tests {
     let aligned = align_ptr(ptr, 8).unwrap();
     assert!(is_aligned(aligned.as_ptr() as usize, 8) == Some(true));
     assert!(aligned.as_ptr() >= ptr.as_ptr());
+  }
+
+  #[test]
+  fn test_align_down() {
+    assert_eq!(align_down(0, 8), Some(0));
+    assert_eq!(align_down(7, 8), Some(0));
+    assert_eq!(align_down(8, 8), Some(8));
+    assert_eq!(align_down(15, 8), Some(8));
+    assert_eq!(align_down(16, 8), Some(16));
+
+    assert_eq!(align_down(123, 64), Some(64));
+    assert_eq!(align_down(256, 64), Some(256));
+
+    assert_eq!(align_down(100, 3), None);
   }
 
   #[test]
