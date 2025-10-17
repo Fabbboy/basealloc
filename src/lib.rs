@@ -15,6 +15,7 @@ use core::{
 use basealloc_alloc::{
   CHUNK_SIZE,
   arena::Arena,
+  classes::class_for,
   static_::{
     Entry,
     acquire_this_arena,
@@ -54,11 +55,30 @@ impl BaseAlloc {
   pub fn sentinel() -> *mut u8 {
     NonNull::dangling().as_ptr()
   }
+
+  fn acquire_arena() -> NonNull<Arena> {
+    acquire_this_arena().unwrap_or_else(|| {
+      let fallback_ptr = FALLBACK.load(Ordering::Acquire);
+      unsafe { NonNull::new_unchecked(fallback_ptr) }
+    })
+  }
 }
 
 unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-    todo!()
+    let class = class_for(layout.size());
+    if let None = class {
+      let arena = Self::acquire_arena();
+      todo!("allocate large from arena {:?}", arena);
+    }
+
+    let arena = Self::acquire_arena();
+
+    todo!(
+      "allocate from size class {:?} in arena {:?}",
+      class.unwrap(),
+      arena
+    )
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
