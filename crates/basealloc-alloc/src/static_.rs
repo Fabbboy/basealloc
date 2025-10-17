@@ -107,21 +107,21 @@ impl Lookup {
 unsafe impl Send for Lookup {}
 unsafe impl Sync for Lookup {}
 
-static EMAP: Lookup = Lookup::new();
+static LOOKUP: Lookup = Lookup::new();
 
 pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), RTreeError> {
   let meta = LUEntry::new(owner);
-  unsafe { EMAP.tree_mut() }.insert(extent.as_ptr() as usize, meta)
+  unsafe { LOOKUP.tree_mut() }.insert(extent.as_ptr() as usize, meta)
 }
 
 pub fn unregister_extent(extent: NonNull<Extent>) -> Option<()> {
-  unsafe { EMAP.tree_mut() }
+  unsafe { LOOKUP.tree_mut() }
     .remove(extent.as_ptr() as usize)
     .map(|_| ())
 }
 
 pub fn lookup_arena(at: usize) -> Option<NonNull<Arena>> {
-  let meta = unsafe { EMAP.tree() }.lookup(at)?;
+  let meta = unsafe { LOOKUP.tree() }.lookup(at)?;
   let owner_ptr = meta.owner.load(Ordering::Acquire);
   NonNull::new(owner_ptr)
 }
