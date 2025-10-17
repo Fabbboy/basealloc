@@ -40,18 +40,19 @@ const LOOKUP_SHIFT: usize = WORD_TRAILING + 1;
 //   NREGULAR = (MAX_REGULAR - FIRST_REGULAR) * NGROUPS ≈ 44 classes
 // - SCLASS_CUTOFF = 2^MAX_REGULAR ≈ 2MB: maximum size handled by size classes
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SizeClass(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SizeClassIndex(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PageSize(usize);
+pub struct SizeClass(pub usize, pub SizeClassIndex);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BinSize(usize);
 
 static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
 static TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
-static PAGES: OnceLock<[PageSize; NSCLASSES]> = OnceLock::new();
+static PAGES: OnceLock<[BinSize; NSCLASSES]> = OnceLock::new();
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -72,29 +73,29 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
   a
 }
 
-fn generate_pages() -> [PageSize; NSCLASSES] {
-  let mut pages = [const { PageSize(0) }; NSCLASSES];
+fn generate_pages() -> [BinSize; NSCLASSES] {
+  let mut pages = [const { BinSize(0) }; NSCLASSES];
   let ps = page_size();
 
   for (i, class) in CLASSES.iter().enumerate() {
-    let SizeClass(size) = *class;
+    let SizeClass(size, _) = *class;
     let g = gcd(ps, size);
     let num_pages = size / g;
-    pages[i] = PageSize(num_pages * ps);
+    pages[i] = BinSize(num_pages * ps);
   }
   pages
 }
 
-fn ensure_pages() -> &'static [PageSize; NSCLASSES] {
+fn ensure_pages() -> &'static [BinSize; NSCLASSES] {
   PAGES.get_or_init(|| generate_pages())
 }
 
 const fn generate_classes() -> [SizeClass; NSCLASSES] {
-  let mut classes = [const { SizeClass(0) }; NSCLASSES];
+  let mut classes = [const { SizeClass(0, SizeClassIndex(0)) }; NSCLASSES];
   let mut idx = 0;
 
   while idx < NTINY {
-    classes[idx] = SizeClass((idx + 1) * QUANTUM);
+    classes[idx] = SizeClass((idx + 1) * QUANTUM, SizeClassIndex(idx));
     idx += 1;
   }
 
@@ -105,7 +106,7 @@ const fn generate_classes() -> [SizeClass; NSCLASSES] {
 
     let mut i = 0;
     while i < NGROUPS && idx < NSCLASSES {
-      classes[idx] = SizeClass(base + delta * (i + 1));
+        classes[idx] = SizeClass(base + delta * (i + 1), SizeClassIndex(idx));
       idx += 1;
       i += 1;
     }
@@ -156,10 +157,15 @@ pub fn class_for(size: usize) -> Option<SizeClassIndex> {
   Some(class_for_regular(size))
 }
 
-#[inline]
-pub fn pages_for(class: SizeClassIndex) -> PageSize {
+#[inline(always)]
+pub fn pages_for(class: SizeClassIndex) -> BinSize {
   let pages = ensure_pages();
   pages[class.0]
+}
+
+#[inline(always)]
+pub fn class_at(idx: SizeClassIndex) -> SizeClass {
+  CLASSES[idx.0]
 }
 
 #[cfg(test)]
@@ -180,8 +186,8 @@ mod tests {
   #[test]
   fn classes_are_monotonic() {
     for i in 1..NSCLASSES {
-      let SizeClass(prev) = CLASSES[i - 1];
-      let SizeClass(curr) = CLASSES[i];
+      let SizeClass(prev, _) = CLASSES[i - 1];
+      let SizeClass(curr, _) = CLASSES[i];
       assert!(
         curr > prev,
         "class[{}]={} not > class[{}]={}",
@@ -196,7 +202,7 @@ mod tests {
   #[test]
   fn tiny_classes_correct() {
     for i in 0..NTINY {
-      let SizeClass(size) = CLASSES[i];
+      let SizeClass(size, _) = CLASSES[i];
       assert_eq!(size, (i + 1) * QUANTUM);
     }
   }
@@ -219,7 +225,7 @@ mod tests {
   #[test]
   fn class_for_all_sizes_valid() {
     for idx in 0..NSCLASSES {
-      let SizeClass(size) = CLASSES[idx];
+      let SizeClass(size, _) = CLASSES[idx];
       let result = class_for(size);
       assert!(
         result.is_some(),
@@ -229,7 +235,7 @@ mod tests {
       );
 
       if idx > 0 {
-        let SizeClass(prev_size) = CLASSES[idx - 1];
+  let SizeClass(prev_size, _) = CLASSES[idx - 1];
         let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
         assert_eq!(
           found_idx,
@@ -245,7 +251,7 @@ mod tests {
   #[test]
   fn regular_classes_exponential() {
     for i in NTINY + 1..NSCLASSES {
-      let SizeClass(size) = CLASSES[i];
+      let SizeClass(size, _) = CLASSES[i];
       assert!(size > TINY_CUTOFF);
     }
   }
@@ -256,7 +262,7 @@ mod tests {
     let ps = page_size();
 
     for (i, page) in pages.iter().enumerate() {
-      let PageSize(page_bytes) = *page;
+      let BinSize(page_bytes) = *page;
       assert!(page_bytes > 0, "page size for class {} is zero", i);
       assert_eq!(
         page_bytes % ps,
@@ -273,8 +279,8 @@ mod tests {
     let pages = ensure_pages();
 
     for (i, page) in pages.iter().enumerate() {
-      let SizeClass(class_size) = CLASSES[i];
-      let PageSize(page_bytes) = *page;
+      let SizeClass(class_size, _) = CLASSES[i];
+      let BinSize(page_bytes) = *page;
 
       let objects_per_page = page_bytes / class_size;
       assert!(

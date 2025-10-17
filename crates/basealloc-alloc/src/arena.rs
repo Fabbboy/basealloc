@@ -17,7 +17,7 @@ use crate::{
   },
   classes::{
     NSCLASSES,
-    SizeClass,
+    SizeClassIndex,
     class_for,
   },
 };
@@ -50,7 +50,7 @@ impl Arena {
 
     let bump = unsafe { &mut *core::ptr::addr_of_mut!((*this_uninit).bump) };
     let bins = core::array::from_fn(|i| {
-      let class = SizeClass(i);
+      let class = SizeClassIndex(i);
       Bin::new(bump, class)
     });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
