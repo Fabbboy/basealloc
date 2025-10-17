@@ -107,17 +107,26 @@ impl Lookup {
 unsafe impl Send for Lookup {}
 unsafe impl Sync for Lookup {}
 
-static LOOKUP: Lookup = Lookup::new();
-
-pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), RTreeError> {
-  let meta = LUEntry::new(owner);
-  unsafe { LOOKUP.tree_mut() }.insert(extent.as_ptr() as usize, meta)
+pub enum LookupError {
+  RTreeError(RTreeError),
+  NotFound,
 }
 
-pub fn unregister_extent(extent: NonNull<Extent>) -> Option<()> {
+static LOOKUP: Lookup = Lookup::new();
+
+pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), LookupError> {
+  let meta = LUEntry::new(owner);
   unsafe { LOOKUP.tree_mut() }
-    .remove(extent.as_ptr() as usize)
-    .map(|_| ())
+    .insert(extent.as_ptr() as usize, meta)
+    .map_err(LookupError::RTreeError)
+}
+
+pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
+  if let None = unsafe { LOOKUP.tree_mut() }.remove(extent.as_ptr() as usize) {
+    return Err(LookupError::NotFound);
+  }
+
+  Ok(())
 }
 
 pub fn lookup_arena(at: usize) -> Option<NonNull<Arena>> {
