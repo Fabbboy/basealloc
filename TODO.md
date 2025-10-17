@@ -1,5 +1,5 @@
-- [ ] Implement TCache
-- [ ] Get allocations and frees working
+- [X] Implement TCache
+- [X] Get allocations and frees working
 - [ ] Implement Red-Black tree
 - [ ] Implement large allocations
 - [ ] Add freed large allocations to RB tree
@@ -15,3 +15,6 @@
 - [ ] All alignment and other methods should return `PrimResult` instead of using `Option`. Error enums have to be adjusted accordingly.
 - [ ] Extract code from global alloc and create separate interface for arena specific allocators
 - [ ] Work on `TODO`s in the code
+- [ ] Review all types prefere safety over performance
+- [ ] Bump overhaul types, speed and safety
+- [ ] TCache needs deallocate method
