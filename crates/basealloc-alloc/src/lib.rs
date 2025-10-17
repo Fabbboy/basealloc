@@ -17,7 +17,6 @@ const WORD_TRAILING: usize = WORD.trailing_zeros() as usize;
 const MAX_ARENAS: usize = 256;
 pub const ARENA_BMS: usize = core::mem::size_of::<BitmapWord>() * MAX_ARENAS;
 
-
 pub const CHUNK_SHIFT: usize = 16 + WORD_TRAILING;
 pub const CHUNK_SIZE: usize = 1 << CHUNK_SHIFT;
 

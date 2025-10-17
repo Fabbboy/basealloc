@@ -25,12 +25,23 @@ use crate::{
   },
 };
 
-const MIN_SLABS: usize = 1;
 
 #[derive(Debug)]
 pub enum BinError {
   BumpError(BumpError),
   SlabError(SlabError),
+}
+
+impl From<BumpError> for BinError {
+  fn from(err: BumpError) -> Self {
+    BinError::BumpError(err)
+  }
+}
+
+impl From<SlabError> for BinError {
+  fn from(err: SlabError) -> Self {
+    BinError::SlabError(err)
+  }
 }
 
 pub type BinResult<T> = Result<T, BinError>;
@@ -58,11 +69,71 @@ impl Bin {
   }
 
   pub fn allocate(&mut self, bump: &mut Bump, arena: NonNull<Arena>) -> BinResult<NonNull<u8>> {
-    todo!()
+    let _lock = self.lock.lock();
+
+    if let Some(mut head_ptr) = self.head {
+      let head_slab = unsafe { head_ptr.as_mut() };
+      if let Ok(ptr) = head_slab.allocate() {
+        return Ok(ptr);
+      }
+    }
+
+    if let Some(mut free_ptr) = self.free.take() {
+      let free_slab = unsafe { free_ptr.as_mut() };
+
+      if let Some(mut head_ptr) = self.head {
+        let head_slab = unsafe { head_ptr.as_mut() };
+        List::insert_before(free_slab, head_slab);
+      }
+      self.head = Some(free_ptr);
+      if self.tail.is_none() {
+        self.tail = Some(free_ptr);
+      }
+
+      let allocated = free_slab.allocate()?;
+      return Ok(allocated);
+    }
+
+    let new_slab = Slab::new(bump, self.class, self.pages.0, arena)?;
+
+    let slab_mut = unsafe { new_slab.as_ptr().as_mut().unwrap() };
+
+    if let Some(mut head_ptr) = self.head {
+      let head_slab = unsafe { head_ptr.as_mut() };
+      List::insert_before(slab_mut, head_slab);
+    }
+    self.head = Some(new_slab);
+    if self.tail.is_none() {
+      self.tail = Some(new_slab);
+    }
+
+    Ok(slab_mut.allocate()?)
   }
 
   pub fn deallocate(&mut self, ptr: NonNull<u8>, mut slab: NonNull<Slab>) -> BinResult<()> {
-    todo!()
+    let _lock = self.lock.lock();
+
+    let slab_ref = unsafe { slab.as_mut() };
+    slab_ref.deallocate(ptr)?;
+
+    if slab_ref.is_empty() {
+      List::remove(slab_ref);
+
+      if Some(slab) == self.head {
+        self.head = slab_ref.link().next();
+      }
+      if Some(slab) == self.tail {
+        self.tail = slab_ref.link().prev();
+      }
+
+      if let Some(mut old_free) = self.free {
+        let old_free_ref = unsafe { old_free.as_mut() };
+        List::insert_before(slab_ref, old_free_ref);
+      }
+      self.free = Some(slab);
+    }
+
+    Ok(())
   }
 }
 

@@ -68,8 +68,7 @@ unsafe impl GlobalAlloc for BaseAlloc {
     let class = class_for(layout.size());
     if let Some(class) = class {
       let arena = unsafe { Self::acquire_arena().as_mut() };
-      let cache = unsafe { acquire_tcache().unwrap().as_mut() }; // TODO: handle None
-      let ptr = cache.allocate(arena, class);
+      let ptr = arena.allocate(class);
       return match ptr {
         Ok(p) => p.as_ptr(),
         Err(_) => core::ptr::null_mut(),
@@ -100,6 +99,9 @@ unsafe impl GlobalAlloc for BaseAlloc {
         }
       }
     }
+    /*
+    
+     */
 
     todo!()
   }

@@ -43,9 +43,13 @@ impl<T, const FANOUT: usize> RNode<T, FANOUT> {
     NonNull::new(raw)
   }
 
-
   #[inline(always)]
-  fn cas_child(&self, idx: usize, expected: *mut RNode<T, FANOUT>, new: NonNull<RNode<T, FANOUT>>) -> bool {
+  fn cas_child(
+    &self,
+    idx: usize,
+    expected: *mut RNode<T, FANOUT>,
+    new: NonNull<RNode<T, FANOUT>>,
+  ) -> bool {
     self.children[idx]
       .compare_exchange_weak(expected, new.as_ptr(), Ordering::AcqRel, Ordering::Relaxed)
       .is_ok()
@@ -58,12 +62,15 @@ impl<T, const FANOUT: usize> RNode<T, FANOUT> {
         if current_ptr != target.as_ptr() {
           break;
         }
-        if child.compare_exchange_weak(
-          current_ptr,
-          core::ptr::null_mut(),
-          Ordering::AcqRel,
-          Ordering::Relaxed
-        ).is_ok() {
+        if child
+          .compare_exchange_weak(
+            current_ptr,
+            core::ptr::null_mut(),
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+          )
+          .is_ok()
+        {
           return true;
         }
       }
@@ -117,7 +124,7 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     }
 
     let new_root = self.new_node(None)?;
-    
+
     match self.root.compare_exchange_weak(
       core::ptr::null_mut(),
       new_root.as_ptr(),
@@ -164,11 +171,10 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     val
   }
 
-
   fn leaf(&self, key: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
     let root_ptr = self.root.load(Ordering::Acquire);
     let mut current = NonNull::new(root_ptr)?;
-    
+
     let levels = Self::levels();
     for level in 0..levels {
       let idx = Self::index_for(key, level);
@@ -203,7 +209,10 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
       let mut new_child = self.new_node(None)?;
       unsafe {
-        new_child.as_mut().parent.store(parent.as_ptr(), Ordering::Release);
+        new_child
+          .as_mut()
+          .parent
+          .store(parent.as_ptr(), Ordering::Release);
       }
 
       if unsafe { parent.as_ref().cas_child(idx, current, new_child) } {
@@ -234,7 +243,11 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
   fn should_remove_node(&self, node: NonNull<RNode<T, FANOUT>>) -> bool {
     let n = unsafe { node.as_ref() };
-    n.value.is_none() && n.children.iter().all(|child| child.load(Ordering::Acquire).is_null())
+    n.value.is_none()
+      && n
+        .children
+        .iter()
+        .all(|child| child.load(Ordering::Acquire).is_null())
   }
 }
 

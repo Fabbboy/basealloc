@@ -164,6 +164,10 @@ impl Slab {
     self.update_last(index);
     Ok(())
   }
+
+  pub fn is_empty(&self) -> bool {
+    self.bitmap.is_clear()
+  }
 }
 
 impl HasLink for Slab {
