@@ -289,6 +289,11 @@ impl Bitmap {
   }
 
   #[inline]
+  pub fn is_full(&self) -> bool {
+    self.used.load(Ordering::Relaxed) >= self.bits
+  }
+
+  #[inline]
   pub fn one_clear(&self) -> bool {
     self.used.load(Ordering::Relaxed) < self.bits
   }
