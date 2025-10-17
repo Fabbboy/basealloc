@@ -22,6 +22,7 @@ use basealloc_alloc::{
     lookup,
     unregister_range,
   },
+  tcache::acquire_tcache,
 };
 use basealloc_sync::lazy::LazyLock;
 use basealloc_sys::misc::Giveup;
@@ -67,21 +68,25 @@ impl BaseAlloc {
 unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     let class = class_for(layout.size());
-    if let None = class {
-      let arena = Self::acquire_arena();
-      todo!("allocate large from arena {:?}", arena);
+    if let Some(class) = class {
+      let arena = unsafe { Self::acquire_arena().as_mut() };
+      let cache = unsafe { acquire_tcache().unwrap().as_mut() }; // TODO: handle None
+      let ptr = cache.allocate(arena, class);
+      return match ptr {
+        Ok(p) => p.as_ptr(),
+        Err(_) => core::ptr::null_mut(),
+      };
     }
 
-    let arena = Self::acquire_arena();
-
-    todo!(
-      "allocate from size class {:?} in arena {:?}",
-      class.unwrap(),
-      arena
-    )
+    let arena = unsafe { Self::acquire_arena().as_mut() };
+    let ptr = arena.allocate_large(layout);
+    return match ptr {
+      Ok(p) => p.as_ptr(),
+      Err(_) => core::ptr::null_mut(),
+    };
   }
 
-  unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+  unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
     if Self::is_invalid(ptr) {
       return;
     }

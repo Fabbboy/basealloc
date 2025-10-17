@@ -41,7 +41,7 @@ pub struct Bin {
 }
 
 impl Bin {
-  pub fn new(idx: SizeClassIndex, chunk_size: usize) -> Self {
+  pub fn new(idx: SizeClassIndex) -> Self {
     Self {
       class: class_at(idx),
       pages: pages_for(idx),
@@ -52,14 +52,12 @@ impl Bin {
     }
   }
 
-  pub fn allocate(&mut self, bump: &mut Bump, layout: Layout) -> BinResult<NonNull<u8>> {
-    _ = layout;
+  pub fn allocate(&mut self, bump: &mut Bump) -> BinResult<NonNull<u8>> {
     todo!()
   }
 
-  pub fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) -> BinResult<()> {
+  pub fn deallocate(&mut self, ptr: NonNull<u8>) -> BinResult<()> {
     _ = ptr;
-    _ = layout;
     todo!()
   }
 }

@@ -47,7 +47,7 @@ impl Arena {
 
     let bins = core::array::from_fn(|i| {
       let class = SizeClassIndex(i);
-      Bin::new(class, chunk_size)
+      Bin::new(class)
     });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
 
@@ -88,6 +88,29 @@ impl Arena {
     let bin = &mut self.bins[class.0];
     bin.deallocate(ptr, layout).map_err(ArenaError::BinError)
   } */
+
+  pub fn allocate(&mut self, sc: SizeClassIndex) -> ArenaResult<NonNull<u8>> {
+    let bin = &mut self.bins[sc.0];
+    bin.allocate(&mut self.bump).map_err(ArenaError::BinError)
+  }
+
+  pub fn allocate_many<const N: usize>(
+    //TODO: rollback on failure
+    &mut self,
+    sc: SizeClassIndex,
+    out: &mut [NonNull<u8>; N],
+  ) -> ArenaResult<()> {
+    for slot in out.iter_mut() {
+      let ptr = self.allocate(sc)?;
+      *slot = ptr;
+    }
+    Ok(())
+  }
+
+  pub fn allocate_large(&mut self, layout: Layout) -> ArenaResult<NonNull<u8>> {
+    _ = layout;
+    todo!()
+  }
 }
 
 #[cfg(test)]

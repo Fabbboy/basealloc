@@ -20,7 +20,10 @@ use basealloc_sys::{
 };
 
 use crate::{
-  arena::ArenaError,
+  arena::{
+    Arena,
+    ArenaError,
+  },
   classes::{
     NSCLASSES,
     SizeClassIndex,
@@ -83,12 +86,17 @@ impl TCache {
   }
 
   fn construct_store(exstart: *mut u8, range: Range<usize>) -> UnsafeStore<*mut u8> {
-    UnsafeStore::from(unsafe {
+    UnsafeStore::from(unsafe {  
       core::slice::from_raw_parts(
         Self::from_offset(exstart, range.start) as *const *mut u8,
         range.end - range.start,
       )
     })
+  }
+
+  pub fn allocate(&self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<NonNull<u8>> {
+    let ptr = backing.allocate(sc).map_err(TCacheError::ArenaError)?; //TODO: find cache refill cache allocate from cache
+    Ok(ptr)
   }
 }
 

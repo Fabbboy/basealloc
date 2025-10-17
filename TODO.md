@@ -14,3 +14,4 @@
 - [ ] Unify `BMStore` and `TCStore` into a `UnsafeStore<T>`
 - [ ] All alignment and other methods should return `PrimResult` instead of using `Option`. Error enums have to be adjusted accordingly.
 - [ ] Extract code from global alloc and create separate interface for arena specific allocators
+- [ ] Work on `TODO`s in the code

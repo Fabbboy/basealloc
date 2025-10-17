@@ -354,7 +354,7 @@ mod tests {
     let slab_size = crate::classes::pages_for(class_idx).0;
 
     let bin_uninit_ptr = bump.create::<Bin>().expect("create bin");
-    let bin = Bin::new(class_idx, CHUNK_SIZE);
+    let bin = Bin::new(class_idx);
     let bin_raw_ptr = bin_uninit_ptr as *mut Bin;
     unsafe { core::ptr::write(bin_raw_ptr, bin) };
     let mut bin_ptr = unsafe { NonNull::new_unchecked(bin_raw_ptr) };

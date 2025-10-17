@@ -182,7 +182,7 @@ mod tests {
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+    let mut bin = Bin::new(class_idx);
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
@@ -200,7 +200,7 @@ mod tests {
     let class = class_at(class_idx);
 
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+    let mut bin = Bin::new(class_idx);
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 

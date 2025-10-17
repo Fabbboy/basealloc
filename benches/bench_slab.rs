@@ -29,7 +29,7 @@ fn bench_slab_allocate(c: &mut Criterion) {
       let class_idx = class_for(sz).unwrap();
       let class = class_at(class_idx);
       let SlabSize(slab_size) = pages_for(class_idx);
-      let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+      let mut bin = Bin::new(class_idx);
       let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
       let slab = unsafe { slab_ptr.as_mut() };
 
@@ -55,7 +55,7 @@ fn bench_slab_allocate_deallocate(c: &mut Criterion) {
       let class_idx = class_for(sz).unwrap();
       let class = class_at(class_idx);
       let SlabSize(slab_size) = pages_for(class_idx);
-      let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+      let mut bin = Bin::new(class_idx);
       let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
       let slab = unsafe { slab_ptr.as_mut() };
 
@@ -75,7 +75,7 @@ fn bench_slab_reuse(c: &mut Criterion) {
   let class_idx = class_for(QUANTUM).unwrap();
   let class = class_at(class_idx);
   let SlabSize(slab_size) = pages_for(class_idx);
-  let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+  let mut bin = Bin::new(class_idx);
   let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
   let slab = unsafe { slab_ptr.as_mut() };
 
@@ -97,7 +97,7 @@ fn bench_slab_interleaved(c: &mut Criterion) {
     let class_idx = class_for(QUANTUM * 8).unwrap();
     let class = class_at(class_idx);
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+    let mut bin = Bin::new(class_idx);
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
     let slab = unsafe { slab_ptr.as_mut() };
 
