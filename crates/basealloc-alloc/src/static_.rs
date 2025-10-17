@@ -3,6 +3,7 @@ use core::sync::atomic::{
   Ordering,
 };
 use std::{
+  cell::UnsafeCell,
   ptr::NonNull,
   sync::atomic::AtomicUsize,
 };
@@ -12,7 +13,10 @@ use basealloc_bitmap::{
   BitmapWord,
 };
 use basealloc_extent::Extent;
-use basealloc_rtree::RTree;
+use basealloc_rtree::{
+  RTree,
+  RTreeError,
+};
 use basealloc_sync::lazy::LazyLock;
 use getset::Getters;
 
@@ -63,7 +67,64 @@ impl Static {
   }
 }
 
-pub static EMAP: RTree<AtomicPtr<Extent>, FANOUT> = RTree::new(CHUNK_SIZE);
+#[derive(Getters)]
+struct LUEntry {
+  #[getset(get = "pub")]
+  owner: AtomicPtr<Arena>,
+}
+
+impl LUEntry {
+  pub fn new(owner: NonNull<Arena>) -> Self {
+    Self {
+      owner: AtomicPtr::new(owner.as_ptr()),
+    }
+  }
+}
+
+unsafe impl Send for LUEntry {}
+unsafe impl Sync for LUEntry {}
+
+struct Lookup {
+  tree: UnsafeCell<RTree<LUEntry, FANOUT>>,
+}
+
+impl Lookup {
+  pub const fn new() -> Self {
+    Self {
+      tree: UnsafeCell::new(RTree::new(CHUNK_SIZE)),
+    }
+  }
+
+  pub const unsafe fn tree(&self) -> &RTree<LUEntry, FANOUT> {
+    unsafe { &*self.tree.get() }
+  }
+
+  pub const unsafe fn tree_mut(&self) -> &mut RTree<LUEntry, FANOUT> {
+    unsafe { &mut *self.tree.get() }
+  }
+}
+
+unsafe impl Send for Lookup {}
+unsafe impl Sync for Lookup {}
+
+static EMAP: Lookup = Lookup::new();
+
+pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), RTreeError> {
+  let meta = LUEntry::new(owner);
+  unsafe { EMAP.tree_mut() }.insert(extent.as_ptr() as usize, meta)
+}
+
+pub fn unregister_extent(extent: NonNull<Extent>) -> Option<()> {
+  unsafe { EMAP.tree_mut() }
+    .remove(extent.as_ptr() as usize)
+    .map(|_| ())
+}
+
+pub fn lookup_arena(at: usize) -> Option<NonNull<Arena>> {
+  let meta = unsafe { EMAP.tree() }.lookup(at)?;
+  let owner_ptr = meta.owner.load(Ordering::Acquire);
+  NonNull::new(owner_ptr)
+}
 
 fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
   let static_ = &*STATIC;
