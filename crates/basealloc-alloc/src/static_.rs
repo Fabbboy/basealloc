@@ -125,13 +125,13 @@ pub enum LookupError {
 
 static LOOKUP: Lookup = Lookup::new();
 
-struct PageRange {
+struct LookupRange {
   start: usize,
   end: usize,
   step: usize,
 }
 
-impl PageRange {
+impl LookupRange {
   fn next_addr(&self, current: usize) -> Result<usize, LookupError> {
     current
       .checked_add(self.step)
@@ -139,7 +139,7 @@ impl PageRange {
   }
 }
 
-fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<PageRange>, LookupError> {
+fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<LookupRange>, LookupError> {
   let extent_ref = unsafe { extent.as_ref() };
   let slice = extent_ref.as_ref();
   let base = slice.as_ptr() as usize;
@@ -154,10 +154,10 @@ fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<PageRange>, Looku
   let end = page_align(end_addr).map_err(LookupError::Align)?;
   let step = page_size();
 
-  Ok(Some(PageRange { start, end, step }))
+  Ok(Some(LookupRange { start, end, step }))
 }
 
-fn rollback_range(tree: &mut RTree<LUEntry, FANOUT>, range: &PageRange, upto: usize) {
+fn rollback_range(tree: &mut RTree<LUEntry, FANOUT>, range: &LookupRange, upto: usize) {
   let mut addr = range.start;
   while addr < upto {
     let _ = tree.remove(addr);
