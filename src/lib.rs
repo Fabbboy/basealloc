@@ -15,10 +15,9 @@ use core::{
 use basealloc_alloc::{
   arena::Arena,
   static_::{
-    CHUNK_SIZE,
     acquire_this_arena,
     lookup_arena,
-  },
+  }, CHUNK_SIZE,
 };
 use basealloc_sync::lazy::LazyLock;
 
