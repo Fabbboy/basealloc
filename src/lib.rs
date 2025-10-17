@@ -13,11 +13,13 @@ use core::{
 };
 
 use basealloc_alloc::{
+  CHUNK_SIZE,
   arena::Arena,
   static_::{
+    LUEntry,
     acquire_this_arena,
-    lookup_arena,
-  }, CHUNK_SIZE,
+    lookup,
+  },
 };
 use basealloc_sync::lazy::LazyLock;
 
@@ -32,9 +34,18 @@ impl BaseAlloc {
       return None;
     }
 
-    if let Some(mut arena_ptr) = lookup_arena(ptr as usize) {
-      let arena = unsafe { arena_ptr.as_mut() };
-      return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
+    if let Some(entry) = lookup(ptr as usize) {
+      match entry {
+        LUEntry::SClass(_) => {
+          if let Some(mut arena_ptr) = acquire_this_arena() {
+            let arena = unsafe { arena_ptr.as_mut() };
+            return arena.sizeof(unsafe { NonNull::new_unchecked(ptr) });
+          }
+        }
+        LUEntry::Large(_) => {
+          todo!("Implement large allocation size retrieval")
+        }
+      }
     }
 
     let fallback = FALLBACK.load(Ordering::Acquire);
@@ -82,10 +93,19 @@ unsafe impl GlobalAlloc for BaseAlloc {
       return;
     }
 
-    if let Some(mut arena_ptr) = lookup_arena(ptr as usize) {
-      let arena = unsafe { arena_ptr.as_mut() };
-      let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
-      return;
+    if let Some(entry) = lookup(ptr as usize) {
+      match entry {
+        LUEntry::SClass(_) => {
+          if let Some(mut arena_ptr) = acquire_this_arena() {
+            let arena = unsafe { arena_ptr.as_mut() };
+            let _ = arena.deallocate(unsafe { NonNull::new_unchecked(ptr) }, layout);
+            return;
+          }
+        }
+        LUEntry::Large(_) => {
+          todo!("Implement large allocation deallocation")
+        }
+      }
     }
 
     let fallback = FALLBACK.load(Ordering::Acquire);

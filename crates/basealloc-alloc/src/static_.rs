@@ -29,10 +29,16 @@ use basealloc_sys::{
 use getset::Getters;
 
 use crate::{
+  ARENA_BMS,
+  CHUNK_SIZE,
+  FANOUT,
+  MAX_ARENAS,
   arena::{
     Arena,
     ArenaResult,
-  }, ARENA_BMS, CHUNK_SIZE, FANOUT, MAX_ARENAS
+  },
+  bin::Bin,
+  slab::Slab,
 };
 
 thread_local! {
@@ -65,17 +71,32 @@ impl Static {
   }
 }
 
-#[derive(Getters)]
-struct LUEntry {
-  #[getset(get = "pub")]
-  owner: AtomicPtr<Arena>,
+pub struct SClassEntry {
+  bin: AtomicPtr<Bin>,
+  slab: AtomicPtr<Slab>,
+}
+
+impl SClassEntry {
+  fn new(bin: NonNull<Bin>, slab: NonNull<Slab>) -> Self {
+    Self {
+      bin: AtomicPtr::new(bin.as_ptr()),
+      slab: AtomicPtr::new(slab.as_ptr()),
+    }
+  }
+}
+
+pub enum LUEntry {
+  SClass(SClassEntry),
+  Large(AtomicPtr<Extent>),
 }
 
 impl LUEntry {
-  pub fn new(owner: NonNull<Arena>) -> Self {
-    Self {
-      owner: AtomicPtr::new(owner.as_ptr()),
-    }
+  fn new_sc(entry: SClassEntry) -> Self {
+    LUEntry::SClass(entry)
+  }
+
+  fn new_large(extent: NonNull<Extent>) -> Self {
+    LUEntry::Large(AtomicPtr::new(extent.as_ptr()))
   }
 }
 
@@ -129,7 +150,7 @@ impl LookupRange {
   }
 }
 
-fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<LookupRange>, LookupError> {
+fn extent_range(extent: NonNull<Extent>) -> Result<Option<LookupRange>, LookupError> {
   let extent_ref = unsafe { extent.as_ref() };
   let slice = extent_ref.as_ref();
   let base = slice.as_ptr() as usize;
@@ -158,21 +179,48 @@ fn rollback_range(tree: &mut RTree<LUEntry, FANOUT>, range: &LookupRange, upto: 
   }
 }
 
-pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result<(), LookupError> {
-  let Some(range) = extent_page_range(extent)? else {
+pub fn register_sc(
+  range: NonNull<Extent>,
+  bin: NonNull<Bin>,
+  slab: NonNull<Slab>,
+) -> Result<(), LookupError> {
+  let Some(range) = extent_range(range)? else {
     return Ok(());
   };
 
   let tree = unsafe { LOOKUP.tree_mut() };
+
+  register_entries(tree, &range, || {
+    LUEntry::new_sc(SClassEntry::new(bin, slab))
+  })
+}
+
+pub fn register_large(extent: NonNull<Extent>) -> Result<(), LookupError> {
+  let Some(range) = extent_range(extent)? else {
+    return Ok(());
+  };
+
+  let tree = unsafe { LOOKUP.tree_mut() };
+  register_entries(tree, &range, || LUEntry::new_large(extent))
+}
+
+fn register_entries<F>(
+  tree: &mut RTree<LUEntry, FANOUT>,
+  range: &LookupRange,
+  mut make_entry: F,
+) -> Result<(), LookupError>
+where
+  F: FnMut() -> LUEntry,
+{
   let mut addr = range.start;
 
   while addr < range.end {
-    match tree.insert(addr, LUEntry::new(owner)) {
+    match tree.insert(addr, make_entry()) {
       Ok(()) => {
         addr = range.next_addr(addr)?;
       }
       Err(err) => {
-        rollback_range(tree, &range, addr);
+        rollback_range(tree, range, addr);
         return Err(LookupError::Tree(err));
       }
     }
@@ -181,8 +229,8 @@ pub fn register_extent(extent: NonNull<Extent>, owner: NonNull<Arena>) -> Result
   Ok(())
 }
 
-pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
-  let Some(range) = extent_page_range(extent)? else {
+pub fn unregister_range(extent: NonNull<Extent>) -> Result<(), LookupError> {
+  let Some(range) = extent_range(extent)? else {
     return Ok(());
   };
 
@@ -202,11 +250,9 @@ pub fn unregister_extent(extent: NonNull<Extent>) -> Result<(), LookupError> {
   }
 }
 
-pub fn lookup_arena(at: usize) -> Option<NonNull<Arena>> {
+pub fn lookup(at: usize) -> Option<&'static LUEntry> {
   let key = page_align_down(at).ok()?;
-  let meta = unsafe { LOOKUP.tree() }.lookup(key)?;
-  let owner_ptr = meta.owner.load(Ordering::Acquire);
-  NonNull::new(owner_ptr)
+  unsafe { LOOKUP.tree() }.lookup(key)
 }
 
 fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
@@ -282,11 +328,43 @@ impl Drop for ArenaGuard {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::{
+    bin::Bin,
+    classes::{
+      QUANTUM,
+      class_for,
+    },
+    slab::Slab,
+  };
+  use basealloc_fixed::bump::Bump;
   use basealloc_sys::prelude::SysOption;
   use core::ptr::drop_in_place;
+  use std::sync::Mutex;
+  
+  static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+
+  fn create_test_bin_and_slab() -> (NonNull<Bin>, NonNull<Slab>) {
+    let mut bump = Bump::new(CHUNK_SIZE);
+    let class_idx = class_for(QUANTUM).expect("get class");
+    let class = crate::classes::class_at(class_idx);
+    let slab_size = crate::classes::pages_for(class_idx).0;
+
+    let bin_uninit_ptr = bump.create::<Bin>().expect("create bin");
+    let bin = Bin::new(class_idx, CHUNK_SIZE);
+    let bin_raw_ptr = bin_uninit_ptr as *mut Bin;
+    unsafe { core::ptr::write(bin_raw_ptr, bin) };
+    let mut bin_ptr = unsafe { NonNull::new_unchecked(bin_raw_ptr) };
+
+    let slab_ptr =
+      Slab::new(&mut bump, class, slab_size, unsafe { bin_ptr.as_mut() }).expect("create slab");
+
+    (bin_ptr, slab_ptr)
+  }
 
   #[test]
   fn lookup_returns_owner_for_interior_pointer() {
+    let _guard = TEST_LOCK.lock().unwrap();
     let ps = page_size();
 
     let mut extent = Extent::new(ps * 2, SysOption::Reserve).expect("reserve extent");
@@ -294,17 +372,18 @@ mod tests {
 
     let arena = unsafe { Arena::new(0, CHUNK_SIZE).expect("arena") };
     let owner = arena;
+    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
 
-    register_extent(extent_ptr, owner).expect("register extent");
+    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("register extent");
 
     let base = extent.as_ref().as_ptr() as usize;
     let interior = base + (ps / 2);
 
-    let found = lookup_arena(interior).expect("lookup interior");
-    assert_eq!(found.as_ptr(), owner.as_ptr());
+    let found = lookup(interior).expect("lookup interior");
+    assert!(matches!(found, LUEntry::SClass(_)));
 
-    unregister_extent(extent_ptr).expect("unregister");
-    assert!(lookup_arena(interior).is_none());
+    unregister_range(extent_ptr).expect("unregister");
+    assert!(lookup(interior).is_none());
 
     unsafe {
       drop_in_place(owner.as_ptr());
@@ -313,6 +392,7 @@ mod tests {
 
   #[test]
   fn unregister_allows_reregistration() {
+    let _guard = TEST_LOCK.lock().unwrap();
     let ps = page_size();
 
     let mut extent = Extent::new(ps, SysOption::Reserve).expect("reserve extent");
@@ -320,19 +400,21 @@ mod tests {
 
     let first_arena = unsafe { Arena::new(3, CHUNK_SIZE).expect("first arena") };
     let second_arena = unsafe { Arena::new(4, CHUNK_SIZE).expect("second arena") };
+    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
 
-    register_extent(extent_ptr, first_arena).expect("register once");
+    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("register once");
 
     let base = extent.as_ref().as_ptr() as usize;
-    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
 
-    unregister_extent(extent_ptr).expect("unregister");
-    assert!(lookup_arena(base).is_none(), "mapping should be cleared");
+    unregister_range(extent_ptr).expect("unregister");
+    assert!(lookup(base).is_none(), "mapping should be cleared");
 
-    register_extent(extent_ptr, second_arena).expect("register twice");
-    assert_eq!(lookup_arena(base).unwrap().as_ptr(), second_arena.as_ptr());
+    let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
+    register_sc(extent_ptr, bin_ptr2, slab_ptr2).expect("register twice");
+    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
 
-    unregister_extent(extent_ptr).expect("final unregister");
+    unregister_range(extent_ptr).expect("final unregister");
 
     unsafe {
       drop_in_place(first_arena.as_ptr());
@@ -342,6 +424,7 @@ mod tests {
 
   #[test]
   fn failed_registration_leaves_existing_mapping_intact() {
+    let _guard = TEST_LOCK.lock().unwrap();
     let ps = page_size();
 
     let mut extent = Extent::new(ps, SysOption::Reserve).expect("reserve extent");
@@ -349,19 +432,22 @@ mod tests {
 
     let first_arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("first arena") };
     let second_arena = unsafe { Arena::new(6, CHUNK_SIZE).expect("second arena") };
+    let (bin_ptr, slab_ptr) = create_test_bin_and_slab();
 
-    register_extent(extent_ptr, first_arena).expect("initial register");
+    register_sc(extent_ptr, bin_ptr, slab_ptr).expect("initial register");
 
     let base = extent.as_ref().as_ptr() as usize;
-    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
 
-    let err = register_extent(extent_ptr, second_arena).expect_err("duplicate should fail");
+    let (bin_ptr2, slab_ptr2) = create_test_bin_and_slab();
+    let err = register_sc(extent_ptr, bin_ptr2, slab_ptr2)
+      .expect_err("duplicate should fail");
     assert!(matches!(err, LookupError::Tree(RTreeError::AlreadyPresent)));
 
-    assert_eq!(lookup_arena(base).unwrap().as_ptr(), first_arena.as_ptr());
+    assert!(matches!(lookup(base).unwrap(), LUEntry::SClass(_)));
 
-    unregister_extent(extent_ptr).expect("unregister");
-    assert!(lookup_arena(base).is_none());
+    unregister_range(extent_ptr).expect("unregister");
+    assert!(lookup(base).is_none());
 
     unsafe {
       drop_in_place(first_arena.as_ptr());

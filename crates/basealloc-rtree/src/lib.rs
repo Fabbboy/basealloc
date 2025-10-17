@@ -38,22 +38,34 @@ impl<T, const FANOUT: usize> RNode<T, FANOUT> {
   }
 
   #[inline(always)]
-  fn child(&self, idx: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
+  fn load_child(&self, idx: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
     let raw = self.children[idx].load(Ordering::Acquire);
     NonNull::new(raw)
   }
 
+
   #[inline(always)]
-  fn set_child(&mut self, idx: usize, node: NonNull<RNode<T, FANOUT>>) {
-    self.children[idx].store(node.as_ptr(), Ordering::Release);
+  fn cas_child(&self, idx: usize, expected: *mut RNode<T, FANOUT>, new: NonNull<RNode<T, FANOUT>>) -> bool {
+    self.children[idx]
+      .compare_exchange_weak(expected, new.as_ptr(), Ordering::AcqRel, Ordering::Relaxed)
+      .is_ok()
   }
 
-  fn clear_slot(&mut self, target: NonNull<RNode<T, FANOUT>>) -> bool {
+  fn clear_child(&mut self, target: NonNull<RNode<T, FANOUT>>) -> bool {
     for child in self.children.iter() {
-      let current_ptr = child.load(Ordering::Acquire);
-      if current_ptr == target.as_ptr() {
-        child.store(core::ptr::null_mut(), Ordering::Release);
-        return true;
+      loop {
+        let current_ptr = child.load(Ordering::Acquire);
+        if current_ptr != target.as_ptr() {
+          break;
+        }
+        if child.compare_exchange_weak(
+          current_ptr,
+          core::ptr::null_mut(),
+          Ordering::AcqRel,
+          Ordering::Relaxed
+        ).is_ok() {
+          return true;
+        }
       }
     }
     false
@@ -99,12 +111,22 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
   }
 
   fn ensure_root(&mut self) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
-    let raw = self.root.load(Ordering::Acquire);
-    NonNull::new(raw).map(Ok).unwrap_or_else(|| {
-      let new_root = self.new_node(None)?;
-      self.root.store(new_root.as_ptr(), Ordering::Release);
-      Ok(new_root)
-    })
+    let current = self.root.load(Ordering::Acquire);
+    if let Some(root) = NonNull::new(current) {
+      return Ok(root);
+    }
+
+    let new_root = self.new_node(None)?;
+    
+    match self.root.compare_exchange_weak(
+      core::ptr::null_mut(),
+      new_root.as_ptr(),
+      Ordering::AcqRel,
+      Ordering::Relaxed,
+    ) {
+      Ok(_) => Ok(new_root),
+      Err(existing) => Ok(unsafe { NonNull::new_unchecked(existing) }),
+    }
   }
 
   fn store(mut node: NonNull<RNode<T, FANOUT>>, val: T) -> RTreeResult<()> {
@@ -142,15 +164,15 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
     val
   }
 
-  fn leaf(&self, key: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
-    let raw = self.root.load(Ordering::Acquire);
-    let mut current = NonNull::new(raw)?;
-    let levels = Self::levels();
 
+  fn leaf(&self, key: usize) -> Option<NonNull<RNode<T, FANOUT>>> {
+    let root_ptr = self.root.load(Ordering::Acquire);
+    let mut current = NonNull::new(root_ptr)?;
+    
+    let levels = Self::levels();
     for level in 0..levels {
       let idx = Self::index_for(key, level);
-      let next = unsafe { current.as_ref().child(idx)? };
-      current = next;
+      current = unsafe { current.as_ref().load_child(idx)? };
     }
 
     Some(current)
@@ -170,57 +192,49 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
 
   fn ensure_child(
     &mut self,
-    mut parent: NonNull<RNode<T, FANOUT>>,
+    parent: NonNull<RNode<T, FANOUT>>,
     idx: usize,
   ) -> RTreeResult<NonNull<RNode<T, FANOUT>>> {
-    if let Some(child) = unsafe { parent.as_ref().child(idx) } {
-      return Ok(child);
-    }
+    loop {
+      let current = unsafe { parent.as_ref() }.children[idx].load(Ordering::Acquire);
+      if let Some(child) = NonNull::new(current) {
+        return Ok(child);
+      }
 
-    let mut new_child = self.new_node(None)?;
-    unsafe {
-      new_child
-        .as_mut()
-        .parent
-        .store(parent.as_ptr(), Ordering::Release);
-      parent.as_mut().set_child(idx, new_child);
-    }
+      let mut new_child = self.new_node(None)?;
+      unsafe {
+        new_child.as_mut().parent.store(parent.as_ptr(), Ordering::Release);
+      }
 
-    Ok(new_child)
+      if unsafe { parent.as_ref().cas_child(idx, current, new_child) } {
+        return Ok(new_child);
+      }
+    }
   }
 
   fn prune(&mut self, mut node: NonNull<RNode<T, FANOUT>>) {
     loop {
-      let should_remove = {
-        let n = unsafe { node.as_ref() };
-        n.value.is_none()
-          && n
-            .children
-            .iter()
-            .all(|child| child.load(Ordering::Acquire).is_null())
-      };
-
+      let should_remove = self.should_remove_node(node);
       if !should_remove {
         break;
       }
 
-      let parent_raw = unsafe { node.as_ref() }.parent.load(Ordering::Acquire);
-
-      NonNull::new(parent_raw).map_or_else(
-        || {
-          self.root.store(core::ptr::null_mut(), Ordering::Release);
-        },
-        |mut parent_node_ptr| {
-          let parent_node = unsafe { parent_node_ptr.as_mut() };
-          let _ = parent_node.clear_slot(node);
-          node = parent_node_ptr;
-        },
-      );
-
-      if parent_raw.is_null() {
+      let parent_ptr = unsafe { node.as_ref() }.parent.load(Ordering::Acquire);
+      if parent_ptr.is_null() {
+        self.root.store(core::ptr::null_mut(), Ordering::Release);
         break;
+      } else {
+        let mut parent_node = unsafe { NonNull::new_unchecked(parent_ptr) };
+        let parent_node_mut = unsafe { parent_node.as_mut() };
+        let _ = parent_node_mut.clear_child(node);
+        node = parent_node;
       }
     }
+  }
+
+  fn should_remove_node(&self, node: NonNull<RNode<T, FANOUT>>) -> bool {
+    let n = unsafe { node.as_ref() };
+    n.value.is_none() && n.children.iter().all(|child| child.load(Ordering::Acquire).is_null())
   }
 }
 

@@ -1,14 +1,8 @@
-/*
-use basealloc_rbtree::RBTree;
-use basealloc_sys::extent::Extent;
-use std::cmp::Ordering;
-
-thread_local! {
-  pub static EFREE: RBTree<Extent, fn(&Extent, &Extent) -> Ordering> = RBTree::new(Extent::ord);
-}
-*/
-
-use std::ops::Range;
+use std::{
+  alloc::Layout,
+  ops::Range,
+  ptr::NonNull,
+};
 
 use basealloc_extent::{
   Extent,
@@ -25,17 +19,21 @@ use basealloc_sys::{
   system::SysOption,
 };
 
-use crate::classes::{
-  NSCLASSES,
-  SizeClassIndex,
-  cache_for,
-  total_cache_size,
+use crate::{
+  arena::ArenaError,
+  classes::{
+    NSCLASSES,
+    SizeClassIndex,
+    cache_for,
+    total_cache_size,
+  },
 };
 
 #[derive(Debug)]
 pub enum TCacheError {
   ExtentError(ExtentError),
   PrimError(PrimError),
+  ArenaError(ArenaError),
 }
 
 pub type TCacheResult<T> = Result<T, TCacheError>;
@@ -96,4 +94,8 @@ impl TCache {
 
 thread_local! {
   pub static TCACHE: LazyLock<TCache> = LazyLock::new(|| TCache::new(total_cache_size()).unwrap());
+}
+
+pub fn acquire_tcache() -> Option<NonNull<TCache>> {
+  TCACHE.try_with(|tc| NonNull::from(&**tc)).ok()
 }

@@ -26,7 +26,10 @@ use basealloc_list::{
 use basealloc_sys::system::SysOption;
 use getset::Getters;
 
-use crate::classes::SizeClass;
+use crate::{
+  bin::Bin,
+  classes::SizeClass,
+};
 
 #[derive(Debug)]
 pub enum SlabError {
@@ -66,7 +69,12 @@ impl Slab {
     Ok(bitmap)
   }
 
-  pub fn new(bump: &mut Bump, class: SizeClass, size: usize) -> SlabResult<NonNull<Slab>> {
+  pub fn new(
+    bump: &mut Bump,
+    class: SizeClass,
+    size: usize,
+    bin: &mut Bin,
+  ) -> SlabResult<NonNull<Slab>> {
     let slab_ptr = bump.create::<Slab>().map_err(SlabError::BumpError)?;
 
     let extent = Extent::new(size, SysOption::Reserve).map_err(SlabError::ExtentError)?;
@@ -157,9 +165,16 @@ impl HasLink for Slab {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{classes::{
-    class_at, class_for, pages_for, SlabSize, QUANTUM
-  }, CHUNK_SIZE};
+  use crate::{
+    CHUNK_SIZE,
+    classes::{
+      QUANTUM,
+      SlabSize,
+      class_at,
+      class_for,
+      pages_for,
+    },
+  };
 
   #[test]
   fn allocate_deallocate_reuse() {
@@ -167,7 +182,8 @@ mod tests {
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut slab_ptr = Slab::new(&mut bump, class, slab_size).expect("create slab");
+    let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
     let p = slab.allocate().expect("alloc");
@@ -177,7 +193,6 @@ mod tests {
     let p2 = slab.allocate().expect("alloc2");
     assert_eq!(p.as_ptr(), p2.as_ptr());
   }
-
   #[test]
   fn allocate_exhaustion_and_reuse() {
     let mut bump = Bump::new(CHUNK_SIZE);
@@ -185,7 +200,8 @@ mod tests {
     let class = class_at(class_idx);
 
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut slab_ptr = Slab::new(&mut bump, class, slab_size).expect("create slab");
+    let mut bin = Bin::new(class_idx, CHUNK_SIZE);
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
     let mut slots = Vec::new();
