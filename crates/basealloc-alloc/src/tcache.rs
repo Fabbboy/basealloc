@@ -1,5 +1,4 @@
 use std::{
-  alloc::Layout,
   ops::Range,
   ptr::NonNull,
 };
@@ -25,6 +24,7 @@ use crate::{
     ArenaError,
   },
   classes::{
+    CacheSize,
     NSCLASSES,
     SizeClassIndex,
     cache_for,
@@ -86,7 +86,7 @@ impl TCache {
   }
 
   fn construct_store(exstart: *mut u8, range: Range<usize>) -> UnsafeStore<*mut u8> {
-    UnsafeStore::from(unsafe {  
+    UnsafeStore::from(unsafe {
       core::slice::from_raw_parts(
         Self::from_offset(exstart, range.start) as *const *mut u8,
         range.end - range.start,
@@ -94,9 +94,41 @@ impl TCache {
     })
   }
 
-  pub fn allocate(&self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<NonNull<u8>> {
-    let ptr = backing.allocate(sc).map_err(TCacheError::ArenaError)?; //TODO: find cache refill cache allocate from cache
-    Ok(ptr)
+  fn cache_for(&mut self, class_idx: SizeClassIndex) -> &mut CacheBin {
+    &mut self.caches[class_idx.0]
+  }
+
+  fn refill_cache(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<()> {
+    let CacheSize(cache_size) = cache_for(sc);
+    let cache = self.cache_for(sc);
+    let buf = cache.store.as_mut_slice();
+
+    let refill_count = cache_size.min(buf.len() - cache.ring.len());
+
+    for _ in 0..refill_count {
+      let ptr = backing.allocate(sc).map_err(TCacheError::ArenaError)?;
+      if cache.ring.push(buf, ptr.as_ptr()).is_err() {
+        break;
+      }
+    }
+
+    Ok(())
+  }
+
+  pub fn allocate(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<NonNull<u8>> {
+    let cache = self.cache_for(sc);
+    let buf = cache.store.as_mut_slice();
+
+    if let Some(ptr_ref) = cache.ring.pop(buf) {
+      return Ok(unsafe { NonNull::new_unchecked(*ptr_ref) });
+    }
+
+    self.refill_cache(backing, sc)?;
+
+    let cache = self.cache_for(sc);
+    let buf = cache.store.as_mut_slice();
+    let ptr_ref = cache.ring.pop(buf).unwrap();
+    Ok(unsafe { NonNull::new_unchecked(*ptr_ref) })
   }
 }
 

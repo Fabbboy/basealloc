@@ -27,8 +27,13 @@ use basealloc_sys::system::SysOption;
 use getset::Getters;
 
 use crate::{
-  bin::Bin,
+  arena::Arena,
   classes::SizeClass,
+  static_::{
+    LookupError,
+    register_sc,
+    unregister_range,
+  },
 };
 
 #[derive(Debug)]
@@ -37,6 +42,7 @@ pub enum SlabError {
   ExtentError(ExtentError),
   LayoutError(LayoutError),
   BitmapError(BitmapError),
+  LookupError(LookupError),
   OutOfMemory,
   InvalidPointer,
 }
@@ -73,9 +79,9 @@ impl Slab {
     bump: &mut Bump,
     class: SizeClass,
     size: usize,
-    bin: &mut Bin,
+    arena: NonNull<Arena>,
   ) -> SlabResult<NonNull<Slab>> {
-    let slab_ptr = bump.create::<Slab>().map_err(SlabError::BumpError)?;
+    let slab = bump.create::<Slab>().map_err(SlabError::BumpError)? as *mut Slab;
 
     let extent = Extent::new(size, SysOption::Reserve).map_err(SlabError::ExtentError)?;
 
@@ -91,11 +97,19 @@ impl Slab {
       last: 0,
     };
 
-    let slab = slab_ptr as *mut Slab;
-
     unsafe {
       core::ptr::write(slab, tmp);
     }
+
+    let slab_ref = unsafe { &mut *slab };
+    let extent_nn = unsafe { NonNull::new_unchecked(&mut slab_ref.extent) };
+    register_sc(
+      extent_nn,
+      unsafe { NonNull::new_unchecked(slab) },
+      class,
+      arena,
+    )
+    .map_err(SlabError::LookupError)?;
 
     Ok(unsafe { NonNull::new_unchecked(slab) })
   }
@@ -162,6 +176,12 @@ impl HasLink for Slab {
   }
 }
 
+impl Drop for Slab {
+  fn drop(&mut self) {
+    let _ = unregister_range(unsafe { NonNull::new_unchecked(&mut self.extent) });
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -182,8 +202,8 @@ mod tests {
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx);
-    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
+    let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
     let p = slab.allocate().expect("alloc");
@@ -200,8 +220,8 @@ mod tests {
     let class = class_at(class_idx);
 
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx);
-    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).expect("create slab");
+    let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
     let mut slots = Vec::new();

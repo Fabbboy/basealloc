@@ -13,6 +13,7 @@ use spin::Mutex;
 
 use crate::{
   FANOUT,
+  arena::Arena,
   classes::{
     SizeClass,
     SizeClassIndex,
@@ -52,7 +53,7 @@ impl Bin {
     }
   }
 
-  pub fn allocate(&mut self, bump: &mut Bump) -> BinResult<NonNull<u8>> {
+  pub fn allocate(&mut self, bump: &mut Bump, arena: NonNull<Arena>) -> BinResult<NonNull<u8>> {
     todo!()
   }
 

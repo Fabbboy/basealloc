@@ -26,4 +26,8 @@ impl<T> UnsafeStore<T> {
   pub fn as_slice(&self) -> &[T] {
     unsafe { core::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
   }
+
+  pub fn as_mut_slice(&mut self) -> &mut [T] {
+    unsafe { core::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+  }
 }

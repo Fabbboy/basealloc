@@ -76,8 +76,11 @@ impl Arena {
   }
 
   pub fn allocate(&mut self, sc: SizeClassIndex) -> ArenaResult<NonNull<u8>> {
+    let self_nn = unsafe { NonNull::new_unchecked(self as *mut Arena) };
     let bin = &mut self.bins[sc.0];
-    bin.allocate(&mut self.bump).map_err(ArenaError::BinError)
+    bin
+      .allocate(&mut self.bump, self_nn)
+      .map_err(ArenaError::BinError)
   }
 
   pub fn allocate_many<const N: usize>(

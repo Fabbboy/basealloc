@@ -8,7 +8,7 @@ use std::hint::black_box;
 
 use basealloc_alloc::{
   CHUNK_SIZE,
-  bin::Bin,
+  arena::Arena,
   classes::{
     QUANTUM,
     SlabSize,
@@ -29,8 +29,8 @@ fn bench_slab_allocate(c: &mut Criterion) {
       let class_idx = class_for(sz).unwrap();
       let class = class_at(class_idx);
       let SlabSize(slab_size) = pages_for(class_idx);
-      let mut bin = Bin::new(class_idx);
-      let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
+      let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+      let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).unwrap();
       let slab = unsafe { slab_ptr.as_mut() };
 
       b.iter(|| {
@@ -55,8 +55,8 @@ fn bench_slab_allocate_deallocate(c: &mut Criterion) {
       let class_idx = class_for(sz).unwrap();
       let class = class_at(class_idx);
       let SlabSize(slab_size) = pages_for(class_idx);
-      let mut bin = Bin::new(class_idx);
-      let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
+      let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+      let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).unwrap();
       let slab = unsafe { slab_ptr.as_mut() };
 
       b.iter(|| {
@@ -75,8 +75,8 @@ fn bench_slab_reuse(c: &mut Criterion) {
   let class_idx = class_for(QUANTUM).unwrap();
   let class = class_at(class_idx);
   let SlabSize(slab_size) = pages_for(class_idx);
-  let mut bin = Bin::new(class_idx);
-  let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
+  let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+  let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).unwrap();
   let slab = unsafe { slab_ptr.as_mut() };
 
   c.bench_function("slab_reuse_same_slot", |b| {
@@ -97,8 +97,8 @@ fn bench_slab_interleaved(c: &mut Criterion) {
     let class_idx = class_for(QUANTUM * 8).unwrap();
     let class = class_at(class_idx);
     let SlabSize(slab_size) = pages_for(class_idx);
-    let mut bin = Bin::new(class_idx);
-    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, &mut bin).unwrap();
+    let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).unwrap();
     let slab = unsafe { slab_ptr.as_mut() };
 
     b.iter(|| {
