@@ -12,6 +12,7 @@ criterion = "0.7.0"
 basealloc-alloc = { workspace = true }
 basealloc-list = { workspace = true }
 basealloc-rtree = { workspace = true }
+basealloc-fixed = { workspace = true }
 
 [profile.dev]
 panic = "abort"
@@ -63,4 +64,8 @@ harness = false
 
 [[bench]]
 name = "bench_radix"
+harness = false
+
+[[bench]]
+name = "bench_slab"
 harness = false

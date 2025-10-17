@@ -34,6 +34,7 @@ name = "basealloc"
 version = "0.1.0"
 dependencies = [
  "basealloc-alloc",
+ "basealloc-fixed",
  "basealloc-list",
  "basealloc-rtree",
  "basealloc-sync",

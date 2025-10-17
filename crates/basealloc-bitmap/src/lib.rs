@@ -252,8 +252,9 @@ impl Bitmap {
       return Some(result);
     }
 
-    if start.is_some() && start_word > 0 {
-      self.iter_range(0, start_word, usize::MAX, !mask_from(start_offset), |v| v)
+    if start_bit > 0 && start_word > 0 {
+      let end_mask = (1usize << start_offset) - 1;
+      self.iter_range(0, start_word - 1, usize::MAX, end_mask, |v| v)
     } else {
       None
     }
@@ -273,8 +274,9 @@ impl Bitmap {
       return Some(result);
     }
 
-    if start.is_some() && start_word > 0 {
-      self.iter_range(0, start_word, usize::MAX, !mask_from(start_offset), |v| v ^ usize::MAX)
+    if start_bit > 0 && start_word > 0 {
+      let end_mask = (1usize << start_offset) - 1;
+      self.iter_range(0, start_word - 1, usize::MAX, end_mask, |v| v ^ usize::MAX)
     } else {
       None
     }
