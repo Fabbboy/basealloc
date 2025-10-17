@@ -10,7 +10,7 @@ use basealloc_fixed::bump::{
 use spin::Mutex;
 
 use crate::classes::{
-  BinSize,
+  SlabSize,
   SizeClass,
   SizeClassIndex,
   class_at,
@@ -27,7 +27,7 @@ pub type BinResult<T> = Result<T, BinError>;
 pub struct Bin {
   // SAFETY: User must ensure bin is dropped before bump.
   class: SizeClass,
-  pages: BinSize,
+  pages: SlabSize,
   lock: Mutex<()>,
 }
 

@@ -93,7 +93,7 @@ fn bump_create_zeroed() {
   let ptr = bump.create::<Sample>().unwrap();
 
   unsafe {
-    let sample = &mut *ptr;
+    let sample = (*ptr).assume_init_mut();
     assert_eq!(sample.a, 0);
     assert_eq!(sample.b, 0);
     sample.a = 1;

@@ -48,11 +48,11 @@ pub struct SizeClassIndex(pub usize);
 pub struct SizeClass(pub usize, pub SizeClassIndex);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BinSize(usize);
+pub struct SlabSize(pub usize);
 
 static CLASSES: [SizeClass; NSCLASSES] = generate_classes();
 static TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
-static PAGES: OnceLock<[BinSize; NSCLASSES]> = OnceLock::new();
+static PAGES: OnceLock<[SlabSize; NSCLASSES]> = OnceLock::new();
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -73,20 +73,20 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
   a
 }
 
-fn generate_pages() -> [BinSize; NSCLASSES] {
-  let mut pages = [const { BinSize(0) }; NSCLASSES];
+fn generate_pages() -> [SlabSize; NSCLASSES] {
+  let mut pages = [const { SlabSize(0) }; NSCLASSES];
   let ps = page_size();
 
   for (i, class) in CLASSES.iter().enumerate() {
     let SizeClass(size, _) = *class;
     let g = gcd(ps, size);
     let num_pages = size / g;
-    pages[i] = BinSize(num_pages * ps);
+    pages[i] = SlabSize(num_pages * ps);
   }
   pages
 }
 
-fn ensure_pages() -> &'static [BinSize; NSCLASSES] {
+fn ensure_pages() -> &'static [SlabSize; NSCLASSES] {
   PAGES.get_or_init(|| generate_pages())
 }
 
@@ -158,7 +158,7 @@ pub fn class_for(size: usize) -> Option<SizeClassIndex> {
 }
 
 #[inline(always)]
-pub fn pages_for(class: SizeClassIndex) -> BinSize {
+pub fn pages_for(class: SizeClassIndex) -> SlabSize {
   let pages = ensure_pages();
   pages[class.0]
 }
@@ -262,7 +262,7 @@ mod tests {
     let ps = page_size();
 
     for (i, page) in pages.iter().enumerate() {
-      let BinSize(page_bytes) = *page;
+      let SlabSize(page_bytes) = *page;
       assert!(page_bytes > 0, "page size for class {} is zero", i);
       assert_eq!(
         page_bytes % ps,
@@ -280,7 +280,7 @@ mod tests {
 
     for (i, page) in pages.iter().enumerate() {
       let SizeClass(class_size, _) = CLASSES[i];
-      let BinSize(page_bytes) = *page;
+      let SlabSize(page_bytes) = *page;
 
       let objects_per_page = page_bytes / class_size;
       assert!(

@@ -27,6 +27,7 @@ use basealloc_sys::system::SysOption;
 
 use crate::classes::SizeClass;
 
+#[derive(Debug)]
 pub enum SlabError {
   BumpError(BumpError),
   ExtentError(ExtentError),
@@ -64,7 +65,7 @@ impl Slab {
   }
 
   pub fn new(bump: &mut Bump, class: SizeClass, size: usize) -> SlabResult<NonNull<Slab>> {
-    let slab = bump.create::<Slab>().map_err(SlabError::BumpError)?;
+    let slab_ptr = bump.create::<Slab>().map_err(SlabError::BumpError)?;
 
     let extent = Extent::new(size, SysOption::Reserve).map_err(SlabError::ExtentError)?;
 
@@ -80,14 +81,17 @@ impl Slab {
       last: 0,
     };
 
+    let slab = slab_ptr as *mut Slab;
+
     unsafe {
-      slab.write(tmp);
+      core::ptr::write(slab, tmp);
     }
+
     Ok(unsafe { NonNull::new_unchecked(slab) })
   }
 
   fn update_last(&mut self, found: usize) {
-    self.last = (found + 1) % self.bitmap.bits();
+    self.last = found % self.bitmap.bits();
   }
 
   fn ptr_at(&mut self, index: usize) -> NonNull<u8> {
@@ -145,5 +149,63 @@ impl HasLink for Slab {
 
   fn link_mut(&mut self) -> &mut Link<Self> {
     &mut self.link
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::{
+    classes::{
+      QUANTUM,
+      SlabSize,
+      class_at,
+      class_for,
+      pages_for,
+    },
+    static_::CHUNK_SIZE,
+  };
+
+  #[test]
+  fn allocate_deallocate_reuse() {
+    let mut bump = Bump::new(CHUNK_SIZE);
+    let class_idx = class_for(QUANTUM).unwrap();
+    let class = class_at(class_idx);
+    let SlabSize(slab_size) = pages_for(class_idx);
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size).expect("create slab");
+    let slab = unsafe { slab_ptr.as_mut() };
+
+    let p = slab.allocate().expect("alloc");
+    assert!(slab.has_ptr(p));
+
+    slab.deallocate(p).expect("dealloc");
+    let p2 = slab.allocate().expect("alloc2");
+    assert_eq!(p.as_ptr(), p2.as_ptr());
+  }
+
+  #[test]
+  fn allocate_exhaustion_and_reuse() {
+    let mut bump = Bump::new(CHUNK_SIZE);
+    let class_idx = class_for(QUANTUM).unwrap();
+    let class = class_at(class_idx);
+
+    let SlabSize(slab_size) = pages_for(class_idx);
+    let mut slab_ptr = Slab::new(&mut bump, class, slab_size).expect("create slab");
+    let slab = unsafe { slab_ptr.as_mut() };
+
+    let mut slots = Vec::new();
+    let regions = slab_size / class.0;
+    for _ in 0..regions {
+      slots.push(slab.allocate().expect("alloc"));
+    }
+
+    match slab.allocate() {
+      Err(SlabError::OutOfMemory) => {}
+      other => panic!("expected OutOfMemory, got {:?}", other),
+    }
+
+    slab.deallocate(slots[regions - 1]).expect("dealloc");
+    let p = slab.allocate().expect("alloc after free");
+    assert!(slab.has_ptr(p));
   }
 }

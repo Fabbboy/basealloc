@@ -1,10 +1,9 @@
 use core::{
   alloc::Layout,
   cmp,
-  mem::ManuallyDrop,
+  mem::{ManuallyDrop, MaybeUninit},
   ptr::{
-    NonNull,
-    drop_in_place,
+    drop_in_place, NonNull
   },
 };
 
@@ -136,12 +135,10 @@ impl Bump {
     Chunk::new(chunk_size)
   }
 
-  pub fn create<T>(&mut self) -> BumpResult<*mut T> {
+  pub fn create<T>(&mut self) -> BumpResult<*mut MaybeUninit<T>> {
     let layout = Layout::new::<T>();
     let bytes = self.allocate(layout)?;
-    let ptr = bytes.as_mut_ptr() as *mut T;
-    unsafe { ptr.write(core::mem::zeroed()) };
-    Ok(ptr)
+    Ok(bytes.as_mut_ptr() as *mut MaybeUninit<T>)
   }
 
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {

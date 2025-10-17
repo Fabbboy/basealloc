@@ -87,9 +87,9 @@ impl<T, const FANOUT: usize> RTree<T, FANOUT> {
       .map_err(RTreeError::Bump)?;
 
     let tmp = RNode::new(value);
-    unsafe { node.write(tmp) };
+    unsafe { (*node).write(tmp) };
     // SAFETY: `Bump::create` never returns a null pointer on success.
-    Ok(unsafe { NonNull::new_unchecked(node) })
+    Ok(unsafe { NonNull::new_unchecked((*node).as_mut_ptr()) })
   }
 
   #[inline(always)]
