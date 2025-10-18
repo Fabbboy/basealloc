@@ -9,11 +9,15 @@ use basealloc_rtree::{
   RTreeError,
 };
 use basealloc_sys::{
-  prelude::page_align_down,
+  prelude::{
+    page_align_down,
+    page_size,
+  },
   prim::PrimError,
 };
 
 use crate::{
+  CHUNK_SIZE,
   FANOUT,
   arena::ArenaId,
   classes::ScIdx,
@@ -86,9 +90,16 @@ impl ArenaMap {
   }
 
   pub fn register(&self, addr: usize, arena: ArenaId) -> Result<(), LookupError> {
-    let aligned_addr = page_align_down(addr)?;
+    let start = page_align_down(addr)?;
+    let end = start + CHUNK_SIZE;
     let tree = unsafe { self.tree_mut() };
-    tree.insert(aligned_addr, arena)?;
+
+    let mut current = start;
+    while current < end {
+      tree.insert(current, arena)?;
+      current += page_size();
+    }
+
     Ok(())
   }
 
@@ -128,30 +139,30 @@ impl ExtentTree {
     unsafe { &mut *self.tree.get() }
   }
 
-  pub fn register(
-    &self,
-    extent: NonNull<Extent>,
-    info: OwnerInfo,
-  ) -> Result<(), LookupError> {
+  fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<(usize, usize)>, LookupError> {
     let extent_ref = unsafe { extent.as_ref() };
     let slice = extent_ref.as_ref();
     let base = slice.as_ptr() as usize;
     let len = slice.len();
 
     if len == 0 {
-      return Ok(());
+      return Ok(None);
     }
 
     let start = page_align_down(base)?;
     let end_addr = base.checked_add(len).ok_or(LookupError::RangeOverflow)?;
     let last_page = page_align_down(end_addr.saturating_sub(1))?;
 
+    Ok(Some((start, last_page)))
+  }
+
+  pub fn register(&self, extent: NonNull<Extent>, info: OwnerInfo) -> Result<(), LookupError> {
+    let Some((start, last_page)) = Self::extent_page_range(extent)? else {
+      return Ok(());
+    };
+
     let tree = unsafe { self.tree_mut() };
-
-    // Register start boundary
     tree.insert(start, info)?;
-
-    // Register end boundary if different from start
     if last_page != start {
       tree.insert(last_page, info)?;
     }
@@ -160,18 +171,9 @@ impl ExtentTree {
   }
 
   pub fn unregister(&self, extent: NonNull<Extent>) -> Result<(), LookupError> {
-    let extent_ref = unsafe { extent.as_ref() };
-    let slice = extent_ref.as_ref();
-    let base = slice.as_ptr() as usize;
-    let len = slice.len();
-
-    if len == 0 {
+    let Some((start, last_page)) = Self::extent_page_range(extent)? else {
       return Ok(());
-    }
-
-    let start = page_align_down(base)?;
-    let end_addr = base.checked_add(len).ok_or(LookupError::RangeOverflow)?;
-    let last_page = page_align_down(end_addr.saturating_sub(1))?;
+    };
 
     let tree = unsafe { self.tree_mut() };
     let mut removed_any = false;

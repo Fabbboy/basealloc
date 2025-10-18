@@ -33,7 +33,6 @@ use crate::{
     LookupError,
     OwnerInfo,
   },
-  static_::register_chunk,
 };
 
 use basealloc_sys::{
@@ -120,7 +119,6 @@ impl Arena {
       .etree_mut()
       .register(extent_nn, info)
       .map_err(ArenaError::LookupError)?;
-    
 
     Ok(unsafe { NonNull::new_unchecked(ptr) })
   }
@@ -147,15 +145,16 @@ impl Arena {
       OwnerInfo::Slab { slab, size_class } => {
         let slab_ref = unsafe { slab.as_ref() };
         let was_empty_before = slab_ref.is_empty();
-        
+
         let bin = &mut self.bins[size_class.0];
         bin.deallocate(ptr, slab).map_err(ArenaError::BinError)?;
-        
+
         if !was_empty_before && slab_ref.is_empty() {
-          let extent_nn = unsafe { NonNull::new_unchecked(slab_ref.extent() as *const _ as *mut _) };
+          let extent_nn =
+            unsafe { NonNull::new_unchecked(slab_ref.extent() as *const _ as *mut _) };
           let _ = self.etree_mut().unregister(extent_nn);
         }
-        
+
         Ok(())
       }
       OwnerInfo::Extent { extent } => self.deallocate_large(extent),
@@ -178,7 +177,13 @@ mod tests {
 
   #[test]
   fn test_arena_creation() {
-    let arena = unsafe { Arena::new(0, CHUNK_SIZE).expect("Failed to create arena") };
+    let arena = unsafe {
+      Arena::new(
+        0,
+        CHUNK_SIZE,
+      )
+      .expect("Failed to create arena")
+    };
     unsafe { drop_in_place(arena.as_ptr()) };
   }
 }

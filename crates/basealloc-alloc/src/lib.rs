@@ -20,7 +20,7 @@ const MAX_ARENAS: usize = 256;
 pub const ARENA_BMS: usize = core::mem::size_of::<BitmapWord>() * MAX_ARENAS;
 
 pub const CHUNK_SHIFT: usize = 16 + WORD_TRAILING;
-pub const CHUNK_SIZE: usize = 1 << CHUNK_SHIFT;
+pub const CHUNK_SIZE: usize = 1 << CHUNK_SHIFT; // ONLY USED FOR THE BUMP ALLOCATOR!!!!
 
 const BITS_PER_LEVEL: usize = 9;
 pub const FANOUT: usize = 1 << BITS_PER_LEVEL;

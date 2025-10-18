@@ -70,9 +70,5 @@ name = "bench_radix"
 harness = false
 
 [[bench]]
-name = "bench_slab"
-harness = false
-
-[[bench]]
 name = "bench_global"
 harness = false
