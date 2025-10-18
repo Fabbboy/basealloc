@@ -26,10 +26,7 @@ use crate::{
     ArenaId,
     ArenaResult,
   },
-  lookup::{
-    ArenaMap,
-    LookupError,
-  },
+  lookup::ArenaMap,
 };
 
 // Storage
@@ -59,10 +56,6 @@ impl Static {
 
     Self { arenas, bitmap }
   }
-}
-
-pub fn register_arena(addr: usize, arena: ArenaId) -> Result<(), LookupError> {
-  ARENA_MAP.register(addr, arena)
 }
 
 pub fn lookup_arena(addr: usize) -> Option<ArenaId> {

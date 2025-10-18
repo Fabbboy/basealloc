@@ -9,15 +9,11 @@ use basealloc_rtree::{
   RTreeError,
 };
 use basealloc_sys::{
-  prelude::{
-    page_align_down,
-    page_size,
-  },
+  prelude::page_align_down,
   prim::PrimError,
 };
 
 use crate::{
-  CHUNK_SIZE,
   FANOUT,
   arena::ArenaId,
   classes::ScIdx,
@@ -87,27 +83,6 @@ impl ArenaMap {
   #[allow(clippy::mut_from_ref)]
   pub unsafe fn tree_mut(&self) -> &mut RTree<ArenaId, FANOUT> {
     unsafe { &mut *self.tree.get() }
-  }
-
-  pub fn register(&self, addr: usize, arena: ArenaId) -> Result<(), LookupError> {
-    let start = page_align_down(addr)?;
-    let end = start + CHUNK_SIZE;
-    let tree = unsafe { self.tree_mut() };
-
-    let mut current = start;
-    while current < end {
-      tree.insert(current, arena)?;
-      current += page_size();
-    }
-
-    Ok(())
-  }
-
-  pub fn unregister(&self, addr: usize) -> Result<(), LookupError> {
-    let aligned_addr = page_align_down(addr)?;
-    let tree = unsafe { self.tree_mut() };
-    tree.remove(aligned_addr).ok_or(LookupError::NotFound)?;
-    Ok(())
   }
 
   pub fn lookup(&self, addr: usize) -> Option<ArenaId> {

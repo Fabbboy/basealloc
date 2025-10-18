@@ -1,4 +1,4 @@
-#[cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 use basealloc::BaseAlloc;
 use core::{
   alloc::{
@@ -59,7 +59,7 @@ pub extern "C" fn realloc(ptr: *mut u8, size: usize) -> *mut u8 {
     return BaseAlloc::sentinel();
   }
 
-  let old_size = BaseAlloc::sizeof(ptr) ;
+  let old_size = BaseAlloc::sizeof(ptr);
   if old_size.is_none() {
     return ptr::null_mut();
   }
@@ -128,7 +128,7 @@ pub extern "C" fn malloc_usable_size(ptr: *mut u8) -> usize {
     return 0;
   }
 
-  let sizeof = unsafe { BaseAlloc::sizeof(ptr) };
+  let sizeof = BaseAlloc::sizeof(ptr);
   if sizeof.is_none() {
     return 0;
   }
