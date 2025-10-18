@@ -95,9 +95,10 @@ unsafe impl GlobalAlloc for BaseAlloc {
     if let Some(entry) = lookup(ptr as usize) {
       match entry {
         Entry::Class(class_entry) => {
+          let mut arena = *class_entry.arena();
           let ptr_nn = unsafe { NonNull::new_unchecked(ptr) };
-          let arena = unsafe { Self::acquire_arena().as_mut() };
-          let _ = arena.deallocate(ptr_nn, class_entry);
+          let arena = unsafe { arena.as_mut() };
+          let _ = arena.deallocate(ptr_nn, &class_entry);
         }
         &Entry::Large(lrg) => {
           let arena = unsafe { Self::acquire_arena().as_mut() };
