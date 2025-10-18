@@ -19,14 +19,10 @@ use crate::{
     BinError,
   },
   classes::{
-    NSCLASSES,
-    SizeClassIndex,
+    SizeClassIndex, NSCLASSES
   },
-  slab::Slab,
   static_::{
-    LookupError,
-    register_large,
-    unregister_range,
+    register_large, unregister_range, ClassEntry, LookupError
   },
 };
 
@@ -117,22 +113,9 @@ impl Arena {
     Ok(())
   }
 
-  pub fn deallocate(
-    &mut self,
-    ptr: NonNull<u8>,
-    sc: SizeClassIndex,
-    slab: NonNull<Slab>,
-  ) -> ArenaResult<()> {
-    let bin = &mut self.bins[sc.0];
-    bin.deallocate(ptr, slab).map_err(ArenaError::BinError)
-  }
-
-  pub fn deallocate_sc(
-    &mut self,
-    ptr: NonNull<u8>,
-    entry: &crate::static_::ClassEntry,
-  ) -> ArenaResult<()> {
-    self.deallocate(ptr, entry.class().1, *entry.slab())
+  pub fn deallocate(&mut self, ptr: NonNull<u8>, entry: &ClassEntry) -> ArenaResult<()> {
+    let bin = &mut self.bins[entry.class().1.0];
+    bin.deallocate(ptr, *entry.slab()).map_err(ArenaError::BinError)
   }
 }
 

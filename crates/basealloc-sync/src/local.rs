@@ -1,13 +1,14 @@
 use core::marker::PhantomData;
 
 use basealloc_fixed::bump::Bump;
+use spin::Mutex;
 
 use crate::lazy::LazyLock;
 
 pub struct ThreadLocal<T, F = fn() -> T> {
   key: LazyLock<libc::pthread_key_t>,
   init: F,
-  bump: Bump,
+  bump: Mutex<Bump>, // TODO: remove mutex when bump uses atomics
   _marker: PhantomData<T>,
 }
 
@@ -32,16 +33,18 @@ impl<T, F> ThreadLocal<T, F>
 where
   F: Fn() -> T,
 {
+  const SIZEOF_T: usize = core::mem::size_of::<T>();
+
   pub const fn new(init: F) -> Self {
     Self {
       key: LazyLock::new(|| obtain_key::<T>()),
       init,
-      bump: Bump::new(core::mem::size_of::<T>() * 2),
+      bump: Mutex::new(Bump::new(Self::SIZEOF_T * 2)),
       _marker: PhantomData,
     }
   }
 
-  fn get_or_init(&mut self) -> *mut T {
+  fn get_or_init(&self) -> *mut T {
     let key = *self.key;
     let ptr = unsafe { libc::pthread_getspecific(key) } as *mut T;
     if !ptr.is_null() {
@@ -50,6 +53,7 @@ where
 
     let uninit = self
       .bump
+      .lock()
       .create::<T>()
       .unwrap_or_else(|_| panic!("ThreadLocal bump allocation failed")) as *mut T;
 
@@ -61,7 +65,7 @@ where
     uninit
   }
 
-  pub fn with<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
+  pub fn with<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
     let ptr = self.get_or_init();
     f(unsafe { &mut *ptr })
   }
@@ -72,3 +76,6 @@ impl<T, F> Drop for ThreadLocal<T, F> {
     let _ = unsafe { libc::pthread_key_delete(*self.key) };
   }
 }
+
+unsafe impl<T, F> Send for ThreadLocal<T, F> {}
+unsafe impl<T, F> Sync for ThreadLocal<T, F> {}

@@ -1,5 +1,4 @@
-use std::sync::OnceLock;
-
+use basealloc_sync::lazy::LazyLock;
 use basealloc_sys::{
   prelude::*,
   prim::{
@@ -57,8 +56,8 @@ pub struct CacheSize(pub usize);
 
 const CLASSES: [SizeClass; NSCLASSES] = generate_classes();
 const TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
-static PAGES: OnceLock<[SlabSize; NSCLASSES]> = OnceLock::new();
-static CACHE_SIZES: OnceLock<[CacheSize; NSCLASSES]> = OnceLock::new();
+static PAGES: LazyLock<[SlabSize; NSCLASSES]> = LazyLock::new(|| generate_pages());
+static CACHE_SIZES: LazyLock<[CacheSize; NSCLASSES]> = LazyLock::new(|| generate_cache_sizes());
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -90,10 +89,6 @@ fn generate_pages() -> [SlabSize; NSCLASSES] {
     pages[i] = SlabSize(num_pages * ps);
   }
   pages
-}
-
-fn ensure_pages() -> &'static [SlabSize; NSCLASSES] {
-  PAGES.get_or_init(generate_pages)
 }
 
 const fn generate_classes() -> [SizeClass; NSCLASSES] {
@@ -134,10 +129,6 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
   table
 }
 
-fn ensure_cache_sizes() -> &'static [CacheSize; NSCLASSES] {
-  CACHE_SIZES.get_or_init(generate_cache_sizes)
-}
-
 fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
   let mut caches = [CacheSize(0); NSCLASSES];
 
@@ -154,13 +145,11 @@ fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
 }
 
 pub fn total_cache_size() -> usize {
-  let caches = ensure_cache_sizes();
-  caches.iter().map(|CacheSize(sz)| *sz).sum()
+  CACHE_SIZES.iter().map(|CacheSize(sz)| *sz).sum()
 }
 
 pub fn cache_for(class: SizeClassIndex) -> CacheSize {
-  let caches = ensure_cache_sizes();
-  caches[class.0]
+  CACHE_SIZES[class.0]
 }
 
 #[inline]
@@ -194,8 +183,7 @@ pub fn class_for(size: usize) -> Option<SizeClassIndex> {
 
 #[inline(always)]
 pub fn pages_for(class: SizeClassIndex) -> SlabSize {
-  let pages = ensure_pages();
-  pages[class.0]
+  PAGES[class.0]
 }
 
 #[inline(always)]
@@ -265,7 +253,12 @@ mod tests {
 
       // Skip the exact SCLASS_CUTOFF boundary (2MB) as it should go to large allocator
       if size >= SCLASS_CUTOFF {
-        assert_eq!(class_for(size), None, "size {} should not have a class (>= SCLASS_CUTOFF)", size);
+        assert_eq!(
+          class_for(size),
+          None,
+          "size {} should not have a class (>= SCLASS_CUTOFF)",
+          size
+        );
         continue;
       }
 
@@ -303,10 +296,9 @@ mod tests {
 
   #[test]
   fn page_sizes_are_multiples() {
-    let pages = ensure_pages();
     let ps = page_size();
 
-    for (i, page) in pages.iter().enumerate() {
+    for (i, page) in PAGES.iter().enumerate() {
       let SlabSize(page_bytes) = *page;
       assert!(page_bytes > 0, "page size for class {} is zero", i);
       assert_eq!(
@@ -321,9 +313,7 @@ mod tests {
 
   #[test]
   fn page_sizes_minimize_waste() {
-    let pages = ensure_pages();
-
-    for (i, page) in pages.iter().enumerate() {
+    for (i, page) in PAGES.iter().enumerate() {
       let SizeClass(class_size, _) = CLASSES[i];
       let SlabSize(page_bytes) = *page;
 

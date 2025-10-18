@@ -1,5 +1,4 @@
-#![no_std]
-
+#[cfg_attr(not(test), no_std)]
 use basealloc::BaseAlloc;
 use core::{
   alloc::{
@@ -10,6 +9,12 @@ use core::{
     self,
   },
 };
+
+#[cfg(not(test))]
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {
+  loop {}
+}
 
 #[global_allocator]
 static ALLOC: BaseAlloc = BaseAlloc {};

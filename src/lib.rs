@@ -116,7 +116,7 @@ unsafe impl GlobalAlloc for BaseAlloc {
             }
           }
           let arena = unsafe { Self::acquire_arena().as_mut() };
-          let _ = arena.deallocate_sc(ptr_nn, class_entry);
+          let _ = arena.deallocate(ptr_nn, class_entry);
         }
         &Entry::Large(lrg) => {
           let arena = unsafe { Self::acquire_arena().as_mut() };

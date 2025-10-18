@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), no_std)]
 use basealloc_bitmap::BitmapWord;
 use basealloc_sys::prim::word_width;
 

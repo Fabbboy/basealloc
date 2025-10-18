@@ -1,4 +1,4 @@
-use std::{
+use core::{
   ops::Range,
   ptr::NonNull,
 };
@@ -8,7 +8,7 @@ use basealloc_extent::{
   ExtentError,
 };
 use basealloc_ring::Ring;
-use basealloc_sync::lazy::LazyLock;
+use basealloc_sync::local::ThreadLocal;
 use basealloc_sys::{
   misc::UnsafeStore,
   prim::{
@@ -137,8 +137,12 @@ impl TCache {
     Ok(unsafe { NonNull::new_unchecked(*ptr_ref) })
   }
 
-  pub fn deallocate(&mut self, backing: &mut Arena, ptr: NonNull<u8>, sc: SizeClassIndex) -> TCacheResult<()> {
-    // Check if cache is full first
+  pub fn deallocate(
+    &mut self,
+    backing: &mut Arena,
+    ptr: NonNull<u8>,
+    sc: SizeClassIndex,
+  ) -> TCacheResult<()> {
     let should_flush = {
       let cache = self.cache_for(sc);
       let buf = cache.store.as_mut_slice();
@@ -149,14 +153,14 @@ impl TCache {
       self.flush_cache(backing, sc)?;
     }
 
-    // Add to cache
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
     if cache.ring.push(buf, ptr.as_ptr()).is_err() {
-      // Cache still full, deallocate directly to arena
       let entry = lookup(ptr.as_ptr() as usize);
       if let Some(Entry::Class(class_entry)) = entry {
-        backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+        backing
+          .deallocate(ptr, class_entry)
+          .map_err(TCacheError::ArenaError)?;
       }
     }
 
@@ -167,14 +171,16 @@ impl TCache {
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
 
-    let flush_count = cache.ring.len() / 2; // Flush half the cache
+    let flush_count = cache.ring.len() / 2;
 
     for _ in 0..flush_count {
       if let Some(ptr_ref) = cache.ring.pop(buf) {
         let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
         let entry = lookup(ptr.as_ptr() as usize);
         if let Some(Entry::Class(class_entry)) = entry {
-          backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+          backing
+            .deallocate(ptr, class_entry)
+            .map_err(TCacheError::ArenaError)?;
         }
       } else {
         break;
@@ -184,6 +190,7 @@ impl TCache {
     Ok(())
   }
 
+  //TODO: unused
   pub fn flush_all(&mut self, backing: &mut Arena) -> TCacheResult<()> {
     for i in 0..NSCLASSES {
       let sc = SizeClassIndex(i);
@@ -194,7 +201,9 @@ impl TCache {
         let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
         let entry = lookup(ptr.as_ptr() as usize);
         if let Some(Entry::Class(class_entry)) = entry {
-          backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+          backing
+            .deallocate(ptr, class_entry)
+            .map_err(TCacheError::ArenaError)?;
         }
       }
     }
@@ -202,10 +211,8 @@ impl TCache {
   }
 }
 
-thread_local! {
-  pub static TCACHE: LazyLock<TCache> = LazyLock::new(|| TCache::new(total_cache_size()).unwrap());
-}
+static TCACHE: ThreadLocal<TCache> = ThreadLocal::new(|| TCache::new(total_cache_size()).unwrap());
 
 pub fn acquire_tcache() -> Option<NonNull<TCache>> {
-  TCACHE.try_with(|tc| NonNull::from(&**tc)).ok()
+  Some(TCACHE.with(|tc| NonNull::from(tc)))
 }

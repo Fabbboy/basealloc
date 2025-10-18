@@ -115,8 +115,8 @@ pub type BumpError = ChunkError;
 pub type BumpResult<T> = Result<T, BumpError>;
 
 pub struct Bump {
-  head: Option<NonNull<Chunk>>,
-  tail: Option<NonNull<Chunk>>,
+  head: Option<NonNull<Chunk>>, // TODO: turn into atomics
+  tail: Option<NonNull<Chunk>>, // TODO: turn into atomics
   chunk_size: usize,
 }
 

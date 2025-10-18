@@ -1,11 +1,11 @@
-use core::sync::atomic::{
-  AtomicPtr,
-  Ordering,
-};
-use std::{
+use core::{
   cell::UnsafeCell,
   ptr::NonNull,
-  sync::atomic::AtomicUsize,
+  sync::atomic::{
+    AtomicPtr,
+    AtomicUsize,
+    Ordering,
+  },
 };
 
 use basealloc_bitmap::{
@@ -17,7 +17,10 @@ use basealloc_rtree::{
   RTree,
   RTreeError,
 };
-use basealloc_sync::lazy::LazyLock;
+use basealloc_sync::{
+  lazy::LazyLock,
+  local::ThreadLocal,
+};
 use basealloc_sys::{
   prelude::{
     page_align,
@@ -41,13 +44,8 @@ use crate::{
   slab::Slab,
 };
 
-thread_local! {
-  pub static THREAD_ARENA: LazyLock<AtomicPtr<Arena>> = LazyLock::new(|| {
-    AtomicPtr::new(acquire_arena().unwrap())
-  });
-
-  pub static ARENA_GUARD: ArenaGuard = const { ArenaGuard };
-}
+static THREAD_ARENA: ThreadLocal<AtomicPtr<Arena>> =
+  ThreadLocal::new(|| AtomicPtr::new(acquire_arena().unwrap()));
 
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
 static BM_LAST: AtomicUsize = AtomicUsize::new(0);
@@ -285,17 +283,14 @@ fn acquire_arena() -> Option<&'static mut Arena> {
 }
 
 pub fn acquire_this_arena() -> Option<NonNull<Arena>> {
-  THREAD_ARENA
-    .try_with(|ta| {
-      let ptr = ta.load(Ordering::Acquire);
-      if ptr.is_null() {
-        return None;
-      }
+  THREAD_ARENA.with(|ta| {
+    let ptr = ta.load(Ordering::Acquire);
+    if ptr.is_null() {
+      return None;
+    }
 
-      Some(unsafe { NonNull::new_unchecked(ptr) })
-    })
-    .ok()
-    .flatten()
+    Some(unsafe { NonNull::new_unchecked(ptr) })
+  })
 }
 
 /// Releases an arena back to the global pool.
@@ -316,23 +311,20 @@ pub unsafe fn release_arena(arena: &'static mut Arena) {
   }
 }
 
-struct ArenaGuard;
-
-impl Drop for ArenaGuard {
+/* impl Drop for ArenaGuard {
   fn drop(&mut self) {
     let arena_ptr = acquire_this_arena();
     if arena_ptr.is_none() {
       return;
     }
 
-    THREAD_ARENA
-      .try_with(|ta| {
-        ta.store(core::ptr::null_mut(), Ordering::Release);
-      })
-      .ok();
+    THREAD_ARENA.with(|ta| {
+      ta.store(core::ptr::null_mut(), Ordering::Release);
+    });
 
     let mut arena_ptr = arena_ptr.unwrap();
     let arena = unsafe { arena_ptr.as_mut() };
     unsafe { release_arena(arena) };
   }
 }
+ */
