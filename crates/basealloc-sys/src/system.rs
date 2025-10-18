@@ -8,6 +8,7 @@ pub enum SysError {
   InvalidArgument,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SysOption {
   Commit,
   Reserve,

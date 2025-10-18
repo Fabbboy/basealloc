@@ -25,13 +25,15 @@ pub type ExtentResult<T> = Result<T, ExtentError>;
 
 pub struct Extent {
   slice: &'static mut [u8],
+  activated: bool,
 }
 
 impl Extent {
   pub fn new(size: usize, options: SysOption) -> ExtentResult<Extent> {
     let slice = unsafe { GLOBAL_SYSTEM.alloc(size, options) }.map_err(ExtentError::SystemError)?;
+    let activated = matches!(options, SysOption::Commit);
 
-    Ok(Extent { slice })
+    Ok(Extent { slice, activated })
   }
 
   pub fn check(&self, range: Range<usize>) -> ExtentResult<()> {
@@ -47,7 +49,30 @@ impl Extent {
 
   pub fn modify(&mut self, opt: SysOption) -> ExtentResult<()> {
     unsafe { GLOBAL_SYSTEM.modify(self.slice, opt) }.map_err(ExtentError::SystemError)?;
+    match opt {
+      SysOption::Commit => self.activated = true,
+      SysOption::Reclaim => self.activated = false,
+      SysOption::Reserve => {} // No state change for reserve
+    }
     Ok(())
+  }
+
+  pub fn activate(&mut self) -> ExtentResult<()> {
+    if self.activated {
+      return Ok(());
+    }
+    self.modify(SysOption::Commit)
+  }
+
+  pub fn deactivate(&mut self) -> ExtentResult<()> {
+    if !self.activated {
+      return Ok(());
+    }
+    self.modify(SysOption::Reclaim)
+  }
+
+  pub fn is_activated(&self) -> bool {
+    self.activated
   }
 
   #[inline(always)]

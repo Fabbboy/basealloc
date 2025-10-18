@@ -31,14 +31,18 @@ static FALLBACK: LazyLock<AtomicPtr<Arena>> =
 pub struct BaseAlloc {}
 
 impl BaseAlloc {
+  /// Returns the size of the allocation pointed to by `ptr`.
+  ///
+  /// # Safety
+  ///
+  /// The caller must ensure that `ptr` is either null or points to a valid
+  /// allocation made by this allocator.
   pub unsafe fn sizeof(ptr: *mut u8) -> Option<usize> {
     if Self::is_invalid(ptr) {
       return None;
     }
 
-    if let None = lookup(ptr as usize) {
-      return None;
-    }
+    lookup(ptr as usize)?;
 
     let entry = lookup(ptr as usize).unwrap();
     match entry {
@@ -67,6 +71,16 @@ unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     let class = class_for(layout.size());
     if let Some(class) = class {
+      // Try tcache first for small allocations
+      if let Some(mut tcache_ptr) = acquire_tcache() {
+        let tcache = unsafe { tcache_ptr.as_mut() };
+        let arena = unsafe { Self::acquire_arena().as_mut() };
+        if let Ok(ptr) = tcache.allocate(arena, class) {
+          return ptr.as_ptr();
+        }
+      }
+
+      // Fallback to arena allocation
       let arena = unsafe { Self::acquire_arena().as_mut() };
       let ptr = arena.allocate(class);
       return match ptr {
@@ -77,10 +91,10 @@ unsafe impl GlobalAlloc for BaseAlloc {
 
     let arena = unsafe { Self::acquire_arena().as_mut() };
     let ptr = arena.allocate_large(layout);
-    return match ptr {
+    match ptr {
       Ok(p) => p.as_ptr(),
       Err(_) => core::ptr::null_mut(),
-    };
+    }
   }
 
   unsafe fn dealloc(&self, ptr: *mut u8, _: Layout) {
@@ -90,8 +104,21 @@ unsafe impl GlobalAlloc for BaseAlloc {
 
     if let Some(entry) = lookup(ptr as usize) {
       match entry {
-        Entry::Class(_) => {
-          todo!()
+        Entry::Class(class_entry) => {
+          let ptr_nn = unsafe { NonNull::new_unchecked(ptr) };
+
+          // Try tcache first for small deallocations
+          if let Some(mut tcache_ptr) = acquire_tcache() {
+            let tcache = unsafe { tcache_ptr.as_mut() };
+            let arena = unsafe { Self::acquire_arena().as_mut() };
+            if tcache.deallocate(arena, ptr_nn, class_entry.class().1).is_ok() {
+              return;
+            }
+          }
+
+          // Fallback to arena deallocation
+          let arena = unsafe { Self::acquire_arena().as_mut() };
+          let _ = arena.deallocate_sc(ptr_nn, class_entry);
         }
         &Entry::Large(lrg) => {
           let arena = unsafe { Self::acquire_arena().as_mut() };
@@ -99,10 +126,5 @@ unsafe impl GlobalAlloc for BaseAlloc {
         }
       }
     }
-    /*
-    
-     */
-
-    todo!()
   }
 }

@@ -59,6 +59,12 @@ pub struct Arena {
 }
 
 impl Arena {
+  /// Creates a new arena.
+  ///
+  /// # Safety
+  ///
+  /// The caller must ensure that the returned arena is properly managed and
+  /// dropped before any referenced memory becomes invalid.
   pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
     let this_uninit = bump.create::<Self>().map_err(ArenaError::BumpError)? as *mut Self;
@@ -119,6 +125,14 @@ impl Arena {
   ) -> ArenaResult<()> {
     let bin = &mut self.bins[sc.0];
     bin.deallocate(ptr, slab).map_err(ArenaError::BinError)
+  }
+
+  pub fn deallocate_sc(
+    &mut self,
+    ptr: NonNull<u8>,
+    entry: &crate::static_::ClassEntry,
+  ) -> ArenaResult<()> {
+    self.deallocate(ptr, entry.class().1, *entry.slab())
   }
 }
 

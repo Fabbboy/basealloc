@@ -30,6 +30,11 @@ use crate::{
     cache_for,
     total_cache_size,
   },
+  static_::{
+    Entry,
+    LookupError,
+    lookup,
+  },
 };
 
 #[derive(Debug)]
@@ -37,6 +42,7 @@ pub enum TCacheError {
   ExtentError(ExtentError),
   PrimError(PrimError),
   ArenaError(ArenaError),
+  LookupError(LookupError),
 }
 
 pub type TCacheResult<T> = Result<T, TCacheError>;
@@ -129,6 +135,70 @@ impl TCache {
     let buf = cache.store.as_mut_slice();
     let ptr_ref = cache.ring.pop(buf).unwrap();
     Ok(unsafe { NonNull::new_unchecked(*ptr_ref) })
+  }
+
+  pub fn deallocate(&mut self, backing: &mut Arena, ptr: NonNull<u8>, sc: SizeClassIndex) -> TCacheResult<()> {
+    // Check if cache is full first
+    let should_flush = {
+      let cache = self.cache_for(sc);
+      let buf = cache.store.as_mut_slice();
+      cache.ring.is_full(buf)
+    };
+
+    if should_flush {
+      self.flush_cache(backing, sc)?;
+    }
+
+    // Add to cache
+    let cache = self.cache_for(sc);
+    let buf = cache.store.as_mut_slice();
+    if cache.ring.push(buf, ptr.as_ptr()).is_err() {
+      // Cache still full, deallocate directly to arena
+      let entry = lookup(ptr.as_ptr() as usize);
+      if let Some(Entry::Class(class_entry)) = entry {
+        backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+      }
+    }
+
+    Ok(())
+  }
+
+  fn flush_cache(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<()> {
+    let cache = self.cache_for(sc);
+    let buf = cache.store.as_mut_slice();
+
+    let flush_count = cache.ring.len() / 2; // Flush half the cache
+
+    for _ in 0..flush_count {
+      if let Some(ptr_ref) = cache.ring.pop(buf) {
+        let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
+        let entry = lookup(ptr.as_ptr() as usize);
+        if let Some(Entry::Class(class_entry)) = entry {
+          backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+        }
+      } else {
+        break;
+      }
+    }
+
+    Ok(())
+  }
+
+  pub fn flush_all(&mut self, backing: &mut Arena) -> TCacheResult<()> {
+    for i in 0..NSCLASSES {
+      let sc = SizeClassIndex(i);
+      let cache = self.cache_for(sc);
+      let buf = cache.store.as_mut_slice();
+
+      while let Some(ptr_ref) = cache.ring.pop(buf) {
+        let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
+        let entry = lookup(ptr.as_ptr() as usize);
+        if let Some(Entry::Class(class_entry)) = entry {
+          backing.deallocate_sc(ptr, class_entry).map_err(TCacheError::ArenaError)?;
+        }
+      }
+    }
+    Ok(())
   }
 }
 

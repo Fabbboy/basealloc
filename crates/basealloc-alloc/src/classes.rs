@@ -93,7 +93,7 @@ fn generate_pages() -> [SlabSize; NSCLASSES] {
 }
 
 fn ensure_pages() -> &'static [SlabSize; NSCLASSES] {
-  PAGES.get_or_init(|| generate_pages())
+  PAGES.get_or_init(generate_pages)
 }
 
 const fn generate_classes() -> [SizeClass; NSCLASSES] {
@@ -135,7 +135,7 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
 }
 
 fn ensure_cache_sizes() -> &'static [CacheSize; NSCLASSES] {
-  CACHE_SIZES.get_or_init(|| generate_cache_sizes())
+  CACHE_SIZES.get_or_init(generate_cache_sizes)
 }
 
 fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
@@ -180,7 +180,7 @@ fn class_for_regular(size: usize) -> SizeClassIndex {
 
 #[inline(always)]
 pub fn class_for(size: usize) -> Option<SizeClassIndex> {
-  if unlikely(size == 0 || size > SCLASS_CUTOFF) {
+  if unlikely(size == 0 || size >= SCLASS_CUTOFF) {
     return None;
   }
 
@@ -245,6 +245,7 @@ mod tests {
   #[test]
   fn class_for_boundary_cases() {
     assert_eq!(class_for(0), None);
+    assert_eq!(class_for(SCLASS_CUTOFF), None);
     assert_eq!(class_for(SCLASS_CUTOFF + 1), None);
 
     let SizeClassIndex(idx) = class_for(1).unwrap();
@@ -261,6 +262,13 @@ mod tests {
   fn class_for_all_sizes_valid() {
     for idx in 0..NSCLASSES {
       let SizeClass(size, _) = CLASSES[idx];
+
+      // Skip the exact SCLASS_CUTOFF boundary (2MB) as it should go to large allocator
+      if size >= SCLASS_CUTOFF {
+        assert_eq!(class_for(size), None, "size {} should not have a class (>= SCLASS_CUTOFF)", size);
+        continue;
+      }
+
       let result = class_for(size);
       assert!(
         result.is_some(),
@@ -271,14 +279,16 @@ mod tests {
 
       if idx > 0 {
         let SizeClass(prev_size, _) = CLASSES[idx - 1];
-        let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
-        assert_eq!(
-          found_idx,
-          idx,
-          "size {} should map to class {}",
-          prev_size + 1,
-          idx
-        );
+        if prev_size + 1 < SCLASS_CUTOFF {
+          let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
+          assert_eq!(
+            found_idx,
+            idx,
+            "size {} should map to class {}",
+            prev_size + 1,
+            idx
+          );
+        }
       }
     }
   }

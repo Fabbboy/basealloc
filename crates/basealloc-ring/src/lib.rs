@@ -16,6 +16,12 @@ pub struct Ring {
   len: AtomicUsize,
 }
 
+impl Default for Ring {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl Ring {
   pub const fn new() -> Self {
     Self {

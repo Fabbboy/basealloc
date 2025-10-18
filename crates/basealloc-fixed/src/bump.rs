@@ -146,11 +146,10 @@ impl Bump {
   }
 
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {
-    if let Some(mut tail) = self.tail {
-      if let Ok(slice) = unsafe { tail.as_mut().allocate(layout) } {
+    if let Some(mut tail) = self.tail
+      && let Ok(slice) = unsafe { tail.as_mut().allocate(layout) } {
         return Ok(slice);
       }
-    }
 
     let mut new_chunk = self.obtain_chunk(layout)?;
 

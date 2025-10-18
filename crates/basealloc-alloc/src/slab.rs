@@ -24,7 +24,7 @@ use basealloc_list::{
   Link,
 };
 use basealloc_sys::system::SysOption;
-use getset::Getters;
+use getset::{Getters, MutGetters};
 
 use crate::{
   arena::Arena,
@@ -49,9 +49,10 @@ pub enum SlabError {
 
 pub type SlabResult<T> = Result<T, SlabError>;
 
-#[derive(Getters)]
+#[derive(Getters, MutGetters)]
 pub struct Slab {
   class: SizeClass,
+  #[getset(get = "pub", get_mut = "pub")]
   extent: Extent,
   link: Link<Self>,
   bitmap: Bitmap,
@@ -143,8 +144,12 @@ impl Slab {
   }
 
   pub fn allocate(&mut self) -> SlabResult<NonNull<u8>> {
+    if !self.extent.is_activated() {
+      self.extent.activate().map_err(SlabError::ExtentError)?;
+    }
+
     let slot = self.bitmap.find_fc(Some(self.last));
-    if let None = slot {
+    if slot.is_none() {
       return Err(SlabError::OutOfMemory);
     }
 

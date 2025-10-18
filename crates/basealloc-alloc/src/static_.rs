@@ -46,7 +46,7 @@ thread_local! {
     AtomicPtr::new(acquire_arena().unwrap())
   });
 
-  pub static ARENA_GUARD: ArenaGuard = ArenaGuard;
+  pub static ARENA_GUARD: ArenaGuard = const { ArenaGuard };
 }
 
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
@@ -120,7 +120,8 @@ impl Lookup {
     unsafe { &*self.tree.get() }
   }
 
-  pub const unsafe fn tree_mut(&self) -> &mut RTree<Entry, FANOUT> {
+  #[allow(clippy::mut_from_ref)]
+  pub unsafe fn tree_mut(&self) -> &mut RTree<Entry, FANOUT> {
     unsafe { &mut *self.tree.get() }
   }
 }
@@ -297,6 +298,14 @@ pub fn acquire_this_arena() -> Option<NonNull<Arena>> {
     .flatten()
 }
 
+/// Releases an arena back to the global pool.
+///
+/// # Safety
+///
+/// The caller must ensure that:
+/// - `arena` is a valid arena obtained from `acquire_arena`
+/// - No references to the arena or its allocations remain after this call
+/// - The arena is not accessed after this function returns
 pub unsafe fn release_arena(arena: &'static mut Arena) {
   let static_ = &*STATIC;
   let idx = arena.index();
@@ -312,7 +321,7 @@ struct ArenaGuard;
 impl Drop for ArenaGuard {
   fn drop(&mut self) {
     let arena_ptr = acquire_this_arena();
-    if let None = arena_ptr {
+    if arena_ptr.is_none() {
       return;
     }
 
