@@ -38,7 +38,6 @@ use crate::{
 };
 
 use basealloc_sys::{
-  misc::Giveup,
   prim::{
     PrimError,
     page_align,
