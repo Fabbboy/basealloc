@@ -9,13 +9,12 @@ use basealloc_list::{
   HasLink,
   List,
 };
-use spin::Mutex;
 
 use crate::{
   arena::Arena,
   classes::{
-    SizeClass,
     ScIdx,
+    SizeClass,
     SlabPages,
     class_at,
     pages_for,
@@ -25,7 +24,6 @@ use crate::{
     SlabError,
   },
 };
-
 
 #[derive(Debug)]
 pub enum BinError {
@@ -58,7 +56,6 @@ pub struct Bin {
   // SAFETY: User must ensure bin is dropped before bump.
   class: SizeClass,
   pages: SlabPages,
-  lock: Mutex<()>,
   free_head: Option<NonNull<Slab>>,
   active_head: Option<NonNull<Slab>>,
   active_tail: Option<NonNull<Slab>>,
@@ -69,57 +66,47 @@ impl Bin {
     Self {
       class: class_at(idx),
       pages: pages_for(idx),
-      lock: Mutex::new(()),
       free_head: None,
       active_head: None,
       active_tail: None,
     }
   }
 
-  pub fn allocate(&mut self, bump: &mut Bump, arena: NonNull<Arena>) -> BinResult<NonNull<u8>> {
-    let _lock = self.lock.lock();
+  fn alloc_fast(&mut self) -> Option<NonNull<u8>> {
+    let active_ptr = self.active_head?;
+    let active_slab = unsafe { active_ptr.as_ptr().as_mut().unwrap() };
+    active_slab.allocate().ok()
+  }
 
-    // Try to allocate from active slabs first
-    if let Some(mut active_ptr) = self.active_head {
-      let active_slab = unsafe { active_ptr.as_mut() };
-      if let Ok(ptr) = active_slab.allocate() {
-        return Ok(ptr);
-      }
+  fn pop_free(&mut self) -> Option<NonNull<Slab>> {
+    let free_ptr = self.free_head.take()?;
+    let free_slab = unsafe { free_ptr.as_ptr().as_mut().unwrap() };
+
+    self.free_head = if let Some(next) = free_slab.link().next() {
+      List::remove(free_slab);
+      Some(next)
+    } else {
+      None
+    };
+
+    if let Some(active_head_ptr) = self.active_head {
+      let active_head_slab = unsafe { active_head_ptr.as_ptr().as_mut().unwrap() };
+      List::insert_before(free_slab, active_head_slab);
+    }
+    self.active_head = Some(free_ptr);
+    if self.active_tail.is_none() {
+      self.active_tail = Some(free_ptr);
     }
 
-    // Try to activate a free slab
-    if let Some(mut free_ptr) = self.free_head.take() {
-      let free_slab = unsafe { free_ptr.as_mut() };
+    Some(free_ptr)
+  }
 
-      // Remove from free list and update free_head
-      if let Some(next) = free_slab.link().next() {
-        List::remove(free_slab);
-        self.free_head = Some(next);
-      } else {
-        self.free_head = None;
-      }
-
-      // Add to active list (allocation will activate the extent automatically)
-      if let Some(mut active_head_ptr) = self.active_head {
-        let active_head_slab = unsafe { active_head_ptr.as_mut() };
-        List::insert_before(free_slab, active_head_slab);
-      }
-      self.active_head = Some(free_ptr);
-      if self.active_tail.is_none() {
-        self.active_tail = Some(free_ptr);
-      }
-
-      let allocated = free_slab.allocate()?;
-      return Ok(allocated);
-    }
-
-    // Create new slab and add to active list (allocation will activate automatically)
+  fn push_new(&mut self, bump: &mut Bump, arena: NonNull<Arena>) -> BinResult<NonNull<Slab>> {
     let new_slab = Slab::new(bump, self.class, self.pages.0, arena)?;
     let slab_mut = unsafe { new_slab.as_ptr().as_mut().unwrap() };
 
-    // Add directly to active list
-    if let Some(mut active_head_ptr) = self.active_head {
-      let active_head_slab = unsafe { active_head_ptr.as_mut() };
+    if let Some(active_head_ptr) = self.active_head {
+      let active_head_slab = unsafe { active_head_ptr.as_ptr().as_mut().unwrap() };
       List::insert_before(slab_mut, active_head_slab);
     }
     self.active_head = Some(new_slab);
@@ -127,32 +114,51 @@ impl Bin {
       self.active_tail = Some(new_slab);
     }
 
+    Ok(new_slab)
+  }
+
+  fn retire_slab(&mut self, slab: NonNull<Slab>, slab_ref: &mut Slab) -> BinResult<()> {
+    List::remove(slab_ref);
+
+    if Some(slab) == self.active_head {
+      self.active_head = slab_ref.link().next();
+    }
+    if Some(slab) == self.active_tail {
+      self.active_tail = slab_ref.link().prev();
+    }
+
+    slab_ref.extent_mut().deactivate()?;
+
+    if let Some(mut free_head_ptr) = self.free_head {
+      let free_head_slab = unsafe { free_head_ptr.as_mut() };
+      List::insert_before(slab_ref, free_head_slab);
+    }
+    self.free_head = Some(slab);
+
+    Ok(())
+  }
+
+  pub fn allocate(&mut self, bump: &mut Bump, arena: NonNull<Arena>) -> BinResult<NonNull<u8>> {
+    if let Some(ptr) = self.alloc_fast() {
+      return Ok(ptr);
+    }
+
+    if let Some(slab) = self.pop_free() {
+      let slab_mut = unsafe { slab.as_ptr().as_mut().unwrap() };
+      return Ok(slab_mut.allocate()?);
+    }
+
+    let new_slab = self.push_new(bump, arena)?;
+    let slab_mut = unsafe { new_slab.as_ptr().as_mut().unwrap() };
     Ok(slab_mut.allocate()?)
   }
 
   pub fn deallocate(&mut self, ptr: NonNull<u8>, mut slab: NonNull<Slab>) -> BinResult<()> {
-    let _lock = self.lock.lock();
-
     let slab_ref = unsafe { slab.as_mut() };
     slab_ref.deallocate(ptr)?;
 
     if slab_ref.is_empty() {
-      List::remove(slab_ref);
-
-      if Some(slab) == self.active_head {
-        self.active_head = slab_ref.link().next();
-      }
-      if Some(slab) == self.active_tail {
-        self.active_tail = slab_ref.link().prev();
-      }
-
-      slab_ref.extent_mut().deactivate()?;
-
-      if let Some(mut free_head_ptr) = self.free_head {
-        let free_head_slab = unsafe { free_head_ptr.as_mut() };
-        List::insert_before(slab_ref, free_head_slab);
-      }
-      self.free_head = Some(slab);
+      self.retire_slab(slab, slab_ref)?;
     }
 
     Ok(())

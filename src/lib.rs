@@ -104,7 +104,7 @@ unsafe impl GlobalAlloc for BaseAlloc {
     }
 
     let ptr_nn = unsafe { NonNull::new_unchecked(ptr) };
-    
+
     let arena_id = match lookup_arena(ptr as usize) {
       Some(id) => id,
       None => return,
