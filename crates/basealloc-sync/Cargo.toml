@@ -7,4 +7,4 @@ edition = "2024"
 spin = { workspace = true }
 libc = { workspace = true }
 
-basealloc-fixed = { workspace = true }
+basealloc-sys = { workspace = true }

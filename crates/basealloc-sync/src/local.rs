@@ -1,11 +1,14 @@
-use core::marker::PhantomData;
+use core::{
+  alloc::Layout,
+  marker::PhantomData,
+};
 
-use basealloc_fixed::bump::Bump;
-use spin::Mutex;
+use basealloc_sys::{
+  GLOBAL_SYSTEM,
+  system::SysOption,
+};
 
 use crate::lazy::LazyLock;
-
-static TLS_BUMP: Mutex<Bump> = Mutex::new(Bump::new(1024 * 16));
 
 pub struct ThreadLocal<T, F = fn() -> T> {
   key: LazyLock<libc::pthread_key_t>,
@@ -49,10 +52,14 @@ where
       return ptr;
     }
 
-    let uninit = TLS_BUMP
-      .lock()
-      .create::<T>()
-      .unwrap_or_else(|_| panic!("ThreadLocal bump allocation failed")) as *mut T;
+    let t_layout = Layout::new::<T>();
+    let mem = unsafe {
+      GLOBAL_SYSTEM
+        .alloc(t_layout.size(), SysOption::Commit)
+        .unwrap()
+    };
+
+    let uninit = mem.as_ptr() as *mut T;
 
     unsafe { uninit.write((self.init)()) };
     let ret = unsafe { libc::pthread_setspecific(key, uninit.cast()) };
