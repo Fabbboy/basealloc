@@ -5,6 +5,7 @@ use core::{
 
 use basealloc_sys::{
   GLOBAL_SYSTEM,
+  prim::page_align,
   system::SysOption,
 };
 
@@ -53,11 +54,8 @@ where
     }
 
     let t_layout = Layout::new::<T>();
-    let mem = unsafe {
-      GLOBAL_SYSTEM
-        .alloc(t_layout.size(), SysOption::Commit)
-        .unwrap()
-    };
+    let pga_size = page_align(t_layout.size()).unwrap();
+    let mem = unsafe { GLOBAL_SYSTEM.alloc(pga_size, SysOption::Commit).unwrap() };
 
     let uninit = mem.as_ptr() as *mut T;
 
