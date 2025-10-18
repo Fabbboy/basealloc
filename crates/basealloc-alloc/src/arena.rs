@@ -11,7 +11,13 @@ use basealloc_fixed::bump::{
   Bump,
   BumpError,
 };
-use getset::CloneGetters;
+use getset::{
+  Getters,
+  MutGetters,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArenaId(pub usize);
 
 use crate::{
   bin::{
@@ -19,11 +25,15 @@ use crate::{
     BinError,
   },
   classes::{
-    SizeClassIndex, NSCLASSES
+    NSCLASSES,
+    ScIdx,
   },
-  static_::{
-    register_large, unregister_range, ClassEntry, LookupError
+  lookup::{
+    ExtentTree,
+    LookupError,
+    OwnerInfo,
   },
+  static_::register_chunk,
 };
 
 use basealloc_sys::{
@@ -46,12 +56,14 @@ pub enum ArenaError {
 
 pub type ArenaResult<T> = Result<T, ArenaError>;
 
-#[derive(CloneGetters)]
+#[derive(Getters, MutGetters)]
 pub struct Arena {
   #[getset(get_clone = "pub")]
   index: usize,
   bins: [Bin; NSCLASSES],
   bump: Bump,
+  #[getset(get = "pub", get_mut = "pub")]
+  etree: ExtentTree,
 }
 
 impl Arena {
@@ -69,15 +81,18 @@ impl Arena {
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bump).write(bump) };
 
     let bins = core::array::from_fn(|i| {
-      let class = SizeClassIndex(i);
+      let class = ScIdx(i);
       Bin::new(class)
     });
     unsafe { core::ptr::addr_of_mut!((*this_uninit).bins).write(bins) };
 
+    let etree = ExtentTree::new(chunk_size);
+    unsafe { core::ptr::addr_of_mut!((*this_uninit).etree).write(etree) };
+
     Ok(unsafe { NonNull::new_unchecked(this_uninit) })
   }
 
-  pub fn allocate(&mut self, sc: SizeClassIndex) -> ArenaResult<NonNull<u8>> {
+  pub fn allocate(&mut self, sc: ScIdx) -> ArenaResult<NonNull<u8>> {
     let self_nn = unsafe { NonNull::new_unchecked(self as *mut Arena) };
     let bin = &mut self.bins[sc.0];
     bin
@@ -100,22 +115,56 @@ impl Arena {
     }
 
     let extent_nn = unsafe { NonNull::new_unchecked(extent_store) };
-    register_large(extent_nn).map_err(ArenaError::LookupError)?;
+    let info = OwnerInfo::new_extent(extent_nn);
+    self
+      .etree_mut()
+      .register(extent_nn, info)
+      .map_err(ArenaError::LookupError)?;
+    
 
     Ok(unsafe { NonNull::new_unchecked(ptr) })
   }
 
   pub fn deallocate_large(&mut self, mut extent: NonNull<Extent>) -> ArenaResult<()> {
-    unregister_range(extent).map_err(ArenaError::LookupError)?;
+    self
+      .etree_mut()
+      .unregister(extent)
+      .map_err(ArenaError::LookupError)?;
     let extent = unsafe { extent.as_mut() };
     let owning = unsafe { core::ptr::read(extent) };
     let _ = owning.giveup();
     Ok(())
   }
 
-  pub fn deallocate(&mut self, ptr: NonNull<u8>, entry: &ClassEntry) -> ArenaResult<()> {
-    let bin = &mut self.bins[entry.class().1.0];
-    bin.deallocate(ptr, *entry.slab()).map_err(ArenaError::BinError)
+  pub fn deallocate(&mut self, ptr: NonNull<u8>) -> ArenaResult<()> {
+    let info = self
+      .etree()
+      .lookup(ptr.as_ptr() as usize)
+      .ok_or(ArenaError::LookupError(LookupError::NotFound))?
+      .clone();
+
+    match info {
+      OwnerInfo::Slab { slab, size_class } => {
+        let slab_ref = unsafe { slab.as_ref() };
+        let was_empty_before = slab_ref.is_empty();
+        
+        let bin = &mut self.bins[size_class.0];
+        bin.deallocate(ptr, slab).map_err(ArenaError::BinError)?;
+        
+        if !was_empty_before && slab_ref.is_empty() {
+          let extent_nn = unsafe { NonNull::new_unchecked(slab_ref.extent() as *const _ as *mut _) };
+          let _ = self.etree_mut().unregister(extent_nn);
+        }
+        
+        Ok(())
+      }
+      OwnerInfo::Extent { extent } => self.deallocate_large(extent),
+    }
+  }
+
+  /// Check if this arena owns the given pointer
+  pub fn owns(&self, ptr: NonNull<u8>) -> bool {
+    self.etree().lookup(ptr.as_ptr() as usize).is_some()
   }
 }
 

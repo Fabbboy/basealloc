@@ -24,17 +24,13 @@ use crate::{
     ArenaError,
   },
   classes::{
-    CacheSize,
+    CacheSlots,
     NSCLASSES,
-    SizeClassIndex,
+    ScIdx,
     cache_for,
     total_cache_size,
   },
-  static_::{
-    Entry,
-    LookupError,
-    lookup,
-  },
+  lookup::LookupError,
 };
 
 #[derive(Debug)]
@@ -73,7 +69,7 @@ impl TCache {
     let exstart = extent.as_ref().as_ptr() as *mut u8;
 
     core::array::from_fn(|i| {
-      let class_idx = SizeClassIndex(i);
+      let class_idx = ScIdx(i);
       let range = Self::get_range(0, class_idx);
       let store = Self::construct_store(exstart, range);
       let ring = Ring::new();
@@ -82,7 +78,7 @@ impl TCache {
     })
   }
 
-  fn get_range(offset: usize, class_idx: SizeClassIndex) -> Range<usize> {
+  fn get_range(offset: usize, class_idx: ScIdx) -> Range<usize> {
     let csize = cache_for(class_idx);
     let byte_size = csize.0 * core::mem::size_of::<*mut u8>();
     offset..offset + byte_size
@@ -103,12 +99,12 @@ impl TCache {
     })
   }
 
-  fn cache_for(&mut self, class_idx: SizeClassIndex) -> &mut CacheBin {
+  fn cache_for(&mut self, class_idx: ScIdx) -> &mut CacheBin {
     &mut self.caches[class_idx.0]
   }
 
-  fn refill_cache(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<()> {
-    let CacheSize(cache_size) = cache_for(sc);
+  fn refill_cache(&mut self, backing: &mut Arena, sc: ScIdx) -> TCacheResult<()> {
+    let CacheSlots(cache_size) = cache_for(sc);
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
 
@@ -124,7 +120,7 @@ impl TCache {
     Ok(())
   }
 
-  pub fn allocate(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<NonNull<u8>> {
+  pub fn allocate(&mut self, backing: &mut Arena, sc: ScIdx) -> TCacheResult<NonNull<u8>> {
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
 
@@ -144,7 +140,7 @@ impl TCache {
     &mut self,
     backing: &mut Arena,
     ptr: NonNull<u8>,
-    sc: SizeClassIndex,
+    sc: ScIdx,
   ) -> TCacheResult<()> {
     let should_flush = {
       let cache = self.cache_for(sc);
@@ -159,18 +155,15 @@ impl TCache {
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
     if cache.ring.push(buf, ptr.as_ptr()).is_err() {
-      let entry = lookup(ptr.as_ptr() as usize);
-      if let Some(Entry::Class(class_entry)) = entry {
-        backing
-          .deallocate(ptr, class_entry)
-          .map_err(TCacheError::ArenaError)?;
-      }
+      backing
+        .deallocate(ptr)
+        .map_err(TCacheError::ArenaError)?;
     }
 
     Ok(())
   }
 
-  fn flush_cache(&mut self, backing: &mut Arena, sc: SizeClassIndex) -> TCacheResult<()> {
+  fn flush_cache(&mut self, backing: &mut Arena, sc: ScIdx) -> TCacheResult<()> {
     let cache = self.cache_for(sc);
     let buf = cache.store.as_mut_slice();
 
@@ -179,12 +172,9 @@ impl TCache {
     for _ in 0..flush_count {
       if let Some(ptr_ref) = cache.ring.pop(buf) {
         let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
-        let entry = lookup(ptr.as_ptr() as usize);
-        if let Some(Entry::Class(class_entry)) = entry {
-          backing
-            .deallocate(ptr, class_entry)
-            .map_err(TCacheError::ArenaError)?;
-        }
+        backing
+          .deallocate(ptr)
+          .map_err(TCacheError::ArenaError)?;
       } else {
         break;
       }
@@ -196,18 +186,15 @@ impl TCache {
   //TODO: unused
   pub fn flush_all(&mut self, backing: &mut Arena) -> TCacheResult<()> {
     for i in 0..NSCLASSES {
-      let sc = SizeClassIndex(i);
+      let sc = ScIdx(i);
       let cache = self.cache_for(sc);
       let buf = cache.store.as_mut_slice();
 
       while let Some(ptr_ref) = cache.ring.pop(buf) {
         let ptr = unsafe { NonNull::new_unchecked(*ptr_ref) };
-        let entry = lookup(ptr.as_ptr() as usize);
-        if let Some(Entry::Class(class_entry)) = entry {
-          backing
-            .deallocate(ptr, class_entry)
-            .map_err(TCacheError::ArenaError)?;
-        }
+        backing
+          .deallocate(ptr)
+          .map_err(TCacheError::ArenaError)?;
       }
     }
     Ok(())

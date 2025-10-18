@@ -24,15 +24,20 @@ use basealloc_list::{
   Link,
 };
 use basealloc_sys::system::SysOption;
-use getset::{Getters, MutGetters};
+use getset::{
+  Getters,
+  MutGetters,
+};
 
 use crate::{
   arena::Arena,
-  classes::SizeClass,
-  static_::{
+  classes::{
+    ScIdx,
+    SizeClass,
+  },
+  lookup::{
     LookupError,
-    register_sc,
-    unregister_range,
+    OwnerInfo,
   },
 };
 
@@ -102,17 +107,22 @@ impl Slab {
       core::ptr::write(slab, tmp);
     }
 
-    let slab_ref = unsafe { &mut *slab };
-    let extent_nn = unsafe { NonNull::new_unchecked(&mut slab_ref.extent) };
-    register_sc(
-      extent_nn,
-      unsafe { NonNull::new_unchecked(slab) },
-      class,
-      arena,
-    )
-    .map_err(SlabError::LookupError)?;
+    let _slab_ref = unsafe { &mut *slab };
+    Self::register(unsafe { NonNull::new_unchecked(slab) }, arena, class.1)?;
 
     Ok(unsafe { NonNull::new_unchecked(slab) })
+  }
+
+  fn register(slab_ptr: NonNull<Slab>, arena: NonNull<Arena>, class_idx: ScIdx) -> SlabResult<()> {
+    let slab_ref = unsafe { slab_ptr.as_ref() };
+    let extent_nn = unsafe { NonNull::new_unchecked(&slab_ref.extent as *const _ as *mut _) };
+    let info = OwnerInfo::new_slab(slab_ptr, class_idx);
+
+    let arena_ref = unsafe { arena.as_ref() };
+    arena_ref
+      .etree()
+      .register(extent_nn, info)
+      .map_err(SlabError::LookupError)
   }
 
   fn update_last(&mut self, found: usize) {
@@ -187,7 +197,8 @@ impl HasLink for Slab {
 
 impl Drop for Slab {
   fn drop(&mut self) {
-    let _ = unregister_range(unsafe { NonNull::new_unchecked(&mut self.extent) });
+    // Note: Arena owns the etree, so we can't unregister here without arena access
+    // The arena will handle cleanup when it's dropped
   }
 }
 
@@ -198,7 +209,7 @@ mod tests {
     CHUNK_SIZE,
     classes::{
       QUANTUM,
-      SlabSize,
+      SlabPages,
       class_at,
       class_for,
       pages_for,
@@ -210,7 +221,7 @@ mod tests {
     let mut bump = Bump::new(CHUNK_SIZE);
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
-    let SlabSize(slab_size) = pages_for(class_idx);
+    let SlabPages(slab_size) = pages_for(class_idx);
     let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
@@ -228,7 +239,7 @@ mod tests {
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
 
-    let SlabSize(slab_size) = pages_for(class_idx);
+    let SlabPages(slab_size) = pages_for(class_idx);
     let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };

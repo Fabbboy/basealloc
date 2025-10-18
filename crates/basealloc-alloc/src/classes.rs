@@ -43,21 +43,21 @@ const CACHE_MAX: usize = 200;
 // - SCLASS_CUTOFF = 2^MAX_REGULAR ≈ 2MB: maximum size handled by size classes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SizeClassIndex(pub usize);
+pub struct ScIdx(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SizeClass(pub usize, pub SizeClassIndex);
+pub struct SizeClass(pub usize, pub ScIdx);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SlabSize(pub usize);
+pub struct SlabPages(pub usize);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CacheSize(pub usize);
+pub struct CacheSlots(pub usize);
 
 const CLASSES: [SizeClass; NSCLASSES] = generate_classes();
 const TINY_LOOKUP: [u8; TINY_CUTOFF >> LOOKUP_SHIFT] = generate_tiny_lookup();
-static PAGES: LazyLock<[SlabSize; NSCLASSES]> = LazyLock::new(|| generate_pages());
-static CACHE_SIZES: LazyLock<[CacheSize; NSCLASSES]> = LazyLock::new(|| generate_cache_sizes());
+static PAGES: LazyLock<[SlabPages; NSCLASSES]> = LazyLock::new(|| generate_pages());
+static CACHE_SIZES: LazyLock<[CacheSlots; NSCLASSES]> = LazyLock::new(|| generate_cache_sizes());
 
 const fn log2c(mut x: usize) -> usize {
   let mut log = 0;
@@ -78,25 +78,25 @@ fn gcd(mut a: usize, mut b: usize) -> usize {
   a
 }
 
-fn generate_pages() -> [SlabSize; NSCLASSES] {
-  let mut pages = [const { SlabSize(0) }; NSCLASSES];
+fn generate_pages() -> [SlabPages; NSCLASSES] {
+  let mut pages = [const { SlabPages(0) }; NSCLASSES];
   let ps = page_size();
 
   for (i, class) in CLASSES.iter().enumerate() {
     let SizeClass(size, _) = *class;
     let g = gcd(ps, size);
     let num_pages = size / g;
-    pages[i] = SlabSize(num_pages * ps);
+    pages[i] = SlabPages(num_pages * ps);
   }
   pages
 }
 
 const fn generate_classes() -> [SizeClass; NSCLASSES] {
-  let mut classes = [const { SizeClass(0, SizeClassIndex(0)) }; NSCLASSES];
+  let mut classes = [const { SizeClass(0, ScIdx(0)) }; NSCLASSES];
   let mut idx = 0;
 
   while idx < NTINY {
-    classes[idx] = SizeClass((idx + 1) * QUANTUM, SizeClassIndex(idx));
+    classes[idx] = SizeClass((idx + 1) * QUANTUM, ScIdx(idx));
     idx += 1;
   }
 
@@ -107,7 +107,7 @@ const fn generate_classes() -> [SizeClass; NSCLASSES] {
 
     let mut i = 0;
     while i < NGROUPS && idx < NSCLASSES {
-      classes[idx] = SizeClass(base + delta * (i + 1), SizeClassIndex(idx));
+      classes[idx] = SizeClass(base + delta * (i + 1), ScIdx(idx));
       idx += 1;
       i += 1;
     }
@@ -129,8 +129,8 @@ const fn generate_tiny_lookup() -> [u8; TINY_CUTOFF >> LOOKUP_SHIFT] {
   table
 }
 
-fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
-  let mut caches = [CacheSize(0); NSCLASSES];
+fn generate_cache_sizes() -> [CacheSlots; NSCLASSES] {
+  let mut caches = [CacheSlots(0); NSCLASSES];
 
   let mut i = 0;
   while i < NSCLASSES {
@@ -138,22 +138,22 @@ fn generate_cache_sizes() -> [CacheSize; NSCLASSES] {
     let scale = SCLASS_CUTOFF / size;
     let nslots = scale.clamp(CACHE_MIN, CACHE_MAX);
 
-    caches[i] = CacheSize(nslots * size);
+    caches[i] = CacheSlots(nslots * size);
     i += 1;
   }
   caches
 }
 
 pub fn total_cache_size() -> usize {
-  CACHE_SIZES.iter().map(|CacheSize(sz)| *sz).sum()
+  CACHE_SIZES.iter().map(|CacheSlots(sz)| *sz).sum()
 }
 
-pub fn cache_for(class: SizeClassIndex) -> CacheSize {
+pub fn cache_for(class: ScIdx) -> CacheSlots {
   CACHE_SIZES[class.0]
 }
 
 #[inline]
-fn class_for_regular(size: usize) -> SizeClassIndex {
+fn class_for_regular(size: usize) -> ScIdx {
   let log = (usize::BITS - size.leading_zeros()) as usize - 1;
   let group_idx = log - FIRST_REGULAR;
   let base = 1 << log;
@@ -164,30 +164,30 @@ fn class_for_regular(size: usize) -> SizeClassIndex {
     0
   };
 
-  SizeClassIndex(NTINY + group_idx * NGROUPS + offset)
+  ScIdx(NTINY + group_idx * NGROUPS + offset)
 }
 
 #[inline(always)]
-pub fn class_for(size: usize) -> Option<SizeClassIndex> {
+pub fn class_for(size: usize) -> Option<ScIdx> {
   if unlikely(size == 0 || size >= SCLASS_CUTOFF) {
     return None;
   }
 
   if likely(size <= TINY_CUTOFF) {
     let idx = TINY_LOOKUP[(size - 1) >> LOOKUP_SHIFT] as usize;
-    return Some(SizeClassIndex(idx));
+    return Some(ScIdx(idx));
   }
 
   Some(class_for_regular(size))
 }
 
 #[inline(always)]
-pub fn pages_for(class: SizeClassIndex) -> SlabSize {
+pub fn pages_for(class: ScIdx) -> SlabPages {
   PAGES[class.0]
 }
 
 #[inline(always)]
-pub fn class_at(idx: SizeClassIndex) -> SizeClass {
+pub fn class_at(idx: ScIdx) -> SizeClass {
   CLASSES[idx.0]
 }
 
@@ -236,13 +236,13 @@ mod tests {
     assert_eq!(class_for(SCLASS_CUTOFF), None);
     assert_eq!(class_for(SCLASS_CUTOFF + 1), None);
 
-    let SizeClassIndex(idx) = class_for(1).unwrap();
+    let ScIdx(idx) = class_for(1).unwrap();
     assert_eq!(idx, 0);
 
-    let SizeClassIndex(idx) = class_for(QUANTUM).unwrap();
+    let ScIdx(idx) = class_for(QUANTUM).unwrap();
     assert_eq!(idx, 0);
 
-    let SizeClassIndex(idx) = class_for(QUANTUM + 1).unwrap();
+    let ScIdx(idx) = class_for(QUANTUM + 1).unwrap();
     assert_eq!(idx, 1);
   }
 
@@ -273,7 +273,7 @@ mod tests {
       if idx > 0 {
         let SizeClass(prev_size, _) = CLASSES[idx - 1];
         if prev_size + 1 < SCLASS_CUTOFF {
-          let SizeClassIndex(found_idx) = class_for(prev_size + 1).unwrap();
+          let ScIdx(found_idx) = class_for(prev_size + 1).unwrap();
           assert_eq!(
             found_idx,
             idx,
@@ -299,7 +299,7 @@ mod tests {
     let ps = page_size();
 
     for (i, page) in PAGES.iter().enumerate() {
-      let SlabSize(page_bytes) = *page;
+      let SlabPages(page_bytes) = *page;
       assert!(page_bytes > 0, "page size for class {} is zero", i);
       assert_eq!(
         page_bytes % ps,
@@ -315,7 +315,7 @@ mod tests {
   fn page_sizes_minimize_waste() {
     for (i, page) in PAGES.iter().enumerate() {
       let SizeClass(class_size, _) = CLASSES[i];
-      let SlabSize(page_bytes) = *page;
+      let SlabPages(page_bytes) = *page;
 
       let objects_per_page = page_bytes / class_size;
       assert!(

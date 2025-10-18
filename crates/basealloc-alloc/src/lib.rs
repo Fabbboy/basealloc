@@ -5,6 +5,7 @@ use basealloc_sys::prim::word_width;
 pub mod arena;
 pub mod bin;
 pub mod classes;
+pub mod lookup;
 pub mod slab;
 pub mod static_;
 pub mod tcache;

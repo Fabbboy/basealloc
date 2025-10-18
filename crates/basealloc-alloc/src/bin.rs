@@ -15,8 +15,8 @@ use crate::{
   arena::Arena,
   classes::{
     SizeClass,
-    SizeClassIndex,
-    SlabSize,
+    ScIdx,
+    SlabPages,
     class_at,
     pages_for,
   },
@@ -57,7 +57,7 @@ pub type BinResult<T> = Result<T, BinError>;
 pub struct Bin {
   // SAFETY: User must ensure bin is dropped before bump.
   class: SizeClass,
-  pages: SlabSize,
+  pages: SlabPages,
   lock: Mutex<()>,
   free_head: Option<NonNull<Slab>>,
   active_head: Option<NonNull<Slab>>,
@@ -65,7 +65,7 @@ pub struct Bin {
 }
 
 impl Bin {
-  pub fn new(idx: SizeClassIndex) -> Self {
+  pub fn new(idx: ScIdx) -> Self {
     Self {
       class: class_at(idx),
       pages: pages_for(idx),
@@ -137,7 +137,6 @@ impl Bin {
     slab_ref.deallocate(ptr)?;
 
     if slab_ref.is_empty() {
-      // Remove from active list
       List::remove(slab_ref);
 
       if Some(slab) == self.active_head {
@@ -147,10 +146,8 @@ impl Bin {
         self.active_tail = slab_ref.link().prev();
       }
 
-      // Deactivate the extent to reclaim memory
       slab_ref.extent_mut().deactivate()?;
 
-      // Add to free list
       if let Some(mut free_head_ptr) = self.free_head {
         let free_head_slab = unsafe { free_head_ptr.as_mut() };
         List::insert_before(slab_ref, free_head_slab);

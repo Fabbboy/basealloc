@@ -1,7 +1,7 @@
 - [X] Implement TCache
 - [X] Get allocations and frees working
 - [ ] Implement Red-Black tree
-- [ ] Implement large allocations
+- [X] Implement large allocations
 - [ ] Add freed large allocations to RB tree
 - [ ] Collect tail waste on bump allocator
 - [ ] Ensure Atomic's and Locks are used everywhere and Option's aren't just floating around
@@ -17,4 +17,4 @@
 - [ ] Work on `TODO`s in the code
 - [ ] Review all types prefere safety over performance
 - [ ] Bump overhaul types, speed and safety
-- [ ] TCache needs deallocate method
+- [X] TCache needs deallocate method
