@@ -22,7 +22,16 @@ unsafe extern "C" fn tls_detor<T>(ptr: *mut libc::c_void) {
     return;
   }
 
+  let t_layout = Layout::new::<T>();
+  let pga_size = page_align(t_layout.size()).unwrap();
+
   unsafe { core::ptr::drop_in_place(ptr as *mut T) };
+
+  let t_slice = unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, pga_size) };
+
+  unsafe {
+    GLOBAL_SYSTEM.dealloc(&t_slice).unwrap();
+  }
 }
 
 fn obtain_key<T>() -> libc::pthread_key_t {
