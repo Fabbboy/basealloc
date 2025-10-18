@@ -114,6 +114,9 @@ impl HasLink for Chunk {
 pub type BumpError = ChunkError;
 pub type BumpResult<T> = Result<T, BumpError>;
 
+unsafe impl Send for Bump {}
+unsafe impl Sync for Bump {} 
+
 pub struct Bump {
   head: Option<NonNull<Chunk>>, // TODO: turn into atomics
   tail: Option<NonNull<Chunk>>, // TODO: turn into atomics
@@ -147,9 +150,10 @@ impl Bump {
 
   pub fn allocate(&mut self, layout: Layout) -> BumpResult<&mut [u8]> {
     if let Some(mut tail) = self.tail
-      && let Ok(slice) = unsafe { tail.as_mut().allocate(layout) } {
-        return Ok(slice);
-      }
+      && let Ok(slice) = unsafe { tail.as_mut().allocate(layout) }
+    {
+      return Ok(slice);
+    }
 
     let mut new_chunk = self.obtain_chunk(layout)?;
 

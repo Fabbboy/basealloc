@@ -5,10 +5,11 @@ use spin::Mutex;
 
 use crate::lazy::LazyLock;
 
+static TLS_BUMP: Mutex<Bump> = Mutex::new(Bump::new(1024 * 16));
+
 pub struct ThreadLocal<T, F = fn() -> T> {
   key: LazyLock<libc::pthread_key_t>,
   init: F,
-  bump: Mutex<Bump>, // TODO: remove mutex when bump uses atomics
   _marker: PhantomData<T>,
 }
 
@@ -33,13 +34,10 @@ impl<T, F> ThreadLocal<T, F>
 where
   F: Fn() -> T,
 {
-  const SIZEOF_T: usize = core::mem::size_of::<T>();
-
   pub const fn new(init: F) -> Self {
     Self {
       key: LazyLock::new(|| obtain_key::<T>()),
       init,
-      bump: Mutex::new(Bump::new(Self::SIZEOF_T * 2)),
       _marker: PhantomData,
     }
   }
@@ -51,8 +49,7 @@ where
       return ptr;
     }
 
-    let uninit = self
-      .bump
+    let uninit = TLS_BUMP
       .lock()
       .create::<T>()
       .unwrap_or_else(|_| panic!("ThreadLocal bump allocation failed")) as *mut T;
