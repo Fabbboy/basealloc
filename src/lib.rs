@@ -14,7 +14,10 @@ use core::{
 
 use basealloc_alloc::{
   CHUNK_SIZE,
-  arena::Arena,
+  arena::{
+    Arena,
+    ArenaId,
+  },
   classes::class_for,
   lookup::OwnerInfo,
   static_::{
@@ -27,12 +30,9 @@ use basealloc_sync::lazy::LazyLock;
 
 static FALLBACK: LazyLock<AtomicPtr<Arena>> = LazyLock::new(|| {
   AtomicPtr::new(unsafe {
-    Arena::new(
-      usize::MAX,
-      CHUNK_SIZE,
-    )
-    .unwrap()
-    .as_ptr()
+    Arena::new(ArenaId(usize::MAX), CHUNK_SIZE)
+      .unwrap()
+      .as_ptr()
   })
 });
 
@@ -47,11 +47,11 @@ impl BaseAlloc {
     let ptr_nn = unsafe { NonNull::new_unchecked(pointer) };
     let arena_id = lookup_arena(pointer as usize).unwrap();
     let arena = get_arena(arena_id).unwrap();
-    let info = arena
-      .etree()
-      .lookup(ptr_nn.as_ptr() as usize)
-      .unwrap()
-      .clone();
+
+    let info = match arena.etree().lookup(ptr_nn.as_ptr() as usize) {
+      Some(i) => i.clone(),
+      None => return None,
+    };
 
     match info {
       OwnerInfo::Slab { size_class, .. } => Some(size_class.0),
@@ -104,8 +104,13 @@ unsafe impl GlobalAlloc for BaseAlloc {
     }
 
     let ptr_nn = unsafe { NonNull::new_unchecked(ptr) };
-    let arena_id = lookup_arena(ptr as usize).unwrap();
+    
+    let arena_id = match lookup_arena(ptr as usize) {
+      Some(id) => id,
+      None => return,
+    };
+
     let arena = get_arena(arena_id).unwrap();
-    arena.deallocate(ptr_nn).unwrap();
+    _ = arena.deallocate(ptr_nn)
   }
 }

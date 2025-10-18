@@ -1,7 +1,7 @@
-- [X] Implement TCache
-- [X] Get allocations and frees working
+- [x] Implement TCache
+- [x] Get allocations and frees working
 - [ ] Implement Red-Black tree
-- [X] Implement large allocations
+- [x] Implement large allocations
 - [ ] Add freed large allocations to RB tree
 - [ ] Collect tail waste on bump allocator
 - [ ] Ensure Atomic's and Locks are used everywhere and Option's aren't just floating around
@@ -17,4 +17,6 @@
 - [ ] Work on `TODO`s in the code
 - [ ] Review all types prefere safety over performance
 - [ ] Bump overhaul types, speed and safety
-- [X] TCache needs deallocate method
+- [x] TCache needs deallocate method
+- [ ] Iterator for Radix-Tree
+- [ ] CRITICAL: Iterate tree in arena destructor to destruct slabs

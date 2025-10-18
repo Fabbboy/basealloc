@@ -85,6 +85,58 @@ impl ArenaMap {
     unsafe { &mut *self.tree.get() }
   }
 
+  fn page_range(&self, extent: NonNull<Extent>) -> Result<Option<(usize, usize)>, LookupError> {
+    let extent_ref = unsafe { extent.as_ref() };
+    let slice = extent_ref.as_ref();
+    let base = slice.as_ptr() as usize;
+    let len = slice.len();
+
+    if len == 0 {
+      return Ok(None);
+    }
+
+    let start = page_align_down(base)?;
+    let end_addr = base.checked_add(len).ok_or(LookupError::RangeOverflow)?;
+    let last_page = page_align_down(end_addr.saturating_sub(1))?;
+
+    Ok(Some((start, last_page)))
+  }
+
+  pub fn associate(&self, extent: NonNull<Extent>, id: ArenaId) -> Result<(), LookupError> {
+    let Some((start, last_page)) = self.page_range(extent)? else {
+      return Ok(());
+    };
+
+    let tree = unsafe { self.tree_mut() };
+    tree.insert(start, id)?;
+    if last_page != start {
+      tree.insert(last_page, id)?;
+    }
+
+    Ok(())
+  }
+
+  pub fn detach(&self, extent: NonNull<Extent>) -> Result<(), LookupError> {
+    let Some((start, last_page)) = self.page_range(extent)? else {
+      return Ok(());
+    };
+
+    let tree = unsafe { self.tree_mut() };
+    let mut removed_any = false;
+
+    removed_any |= tree.remove(start).is_some();
+
+    if last_page != start {
+      removed_any |= tree.remove(last_page).is_some();
+    }
+
+    if removed_any {
+      Ok(())
+    } else {
+      Err(LookupError::NotFound)
+    }
+  }
+
   pub fn lookup(&self, addr: usize) -> Option<ArenaId> {
     let aligned_addr = page_align_down(addr).ok()?;
     unsafe { self.tree() }.lookup(aligned_addr).copied()
@@ -114,7 +166,7 @@ impl ExtentTree {
     unsafe { &mut *self.tree.get() }
   }
 
-  fn extent_page_range(extent: NonNull<Extent>) -> Result<Option<(usize, usize)>, LookupError> {
+  fn page_range(extent: NonNull<Extent>) -> Result<Option<(usize, usize)>, LookupError> {
     let extent_ref = unsafe { extent.as_ref() };
     let slice = extent_ref.as_ref();
     let base = slice.as_ptr() as usize;
@@ -132,7 +184,7 @@ impl ExtentTree {
   }
 
   pub fn register(&self, extent: NonNull<Extent>, info: OwnerInfo) -> Result<(), LookupError> {
-    let Some((start, last_page)) = Self::extent_page_range(extent)? else {
+    let Some((start, last_page)) = Self::page_range(extent)? else {
       return Ok(());
     };
 
@@ -146,7 +198,7 @@ impl ExtentTree {
   }
 
   pub fn unregister(&self, extent: NonNull<Extent>) -> Result<(), LookupError> {
-    let Some((start, last_page)) = Self::extent_page_range(extent)? else {
+    let Some((start, last_page)) = Self::page_range(extent)? else {
       return Ok(());
     };
 

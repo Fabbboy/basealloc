@@ -12,8 +12,7 @@ use basealloc_fixed::bump::{
   BumpError,
 };
 use getset::{
-  Getters,
-  MutGetters,
+  CloneGetters, Getters, MutGetters
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,10 +54,10 @@ pub enum ArenaError {
 
 pub type ArenaResult<T> = Result<T, ArenaError>;
 
-#[derive(Getters, MutGetters)]
+#[derive(Getters, MutGetters, CloneGetters)]
 pub struct Arena {
   #[getset(get_clone = "pub")]
-  index: usize,
+  index: ArenaId,
   bins: [Bin; NSCLASSES],
   bump: Bump,
   #[getset(get = "pub", get_mut = "pub")]
@@ -72,7 +71,7 @@ impl Arena {
   ///
   /// The caller must ensure that the returned arena is properly managed and
   /// dropped before any referenced memory becomes invalid.
-  pub unsafe fn new(index: usize, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
+  pub unsafe fn new(index: ArenaId, chunk_size: usize) -> ArenaResult<NonNull<Self>> {
     let mut bump = Bump::new(chunk_size);
     let this_uninit = bump.create::<Self>().map_err(ArenaError::BumpError)? as *mut Self;
 
@@ -177,13 +176,7 @@ mod tests {
 
   #[test]
   fn test_arena_creation() {
-    let arena = unsafe {
-      Arena::new(
-        0,
-        CHUNK_SIZE,
-      )
-      .expect("Failed to create arena")
-    };
+    let arena = unsafe { Arena::new(ArenaId(0), CHUNK_SIZE).expect("Failed to create arena") };
     unsafe { drop_in_place(arena.as_ptr()) };
   }
 }

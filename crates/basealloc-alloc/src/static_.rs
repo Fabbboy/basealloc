@@ -33,9 +33,7 @@ use crate::{
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
 static BM_LAST: AtomicUsize = AtomicUsize::new(0);
 static STATIC: LazyLock<Static> = LazyLock::new(|| Static::new(&BM_STORE));
-static ARENA_MAP: ArenaMap = ArenaMap::new(
-  CHUNK_SIZE,
-);
+pub static ARENA_MAP: ArenaMap = ArenaMap::new(CHUNK_SIZE);
 
 static THREAD_ARENA: ThreadLocal<AtomicPtr<Arena>> =
   ThreadLocal::new(|| AtomicPtr::new(acquire_arena().unwrap())); // TODO: add new container to impl drop
@@ -72,15 +70,10 @@ pub fn get_arena(arena_id: ArenaId) -> Option<&'static mut Arena> {
   }
 }
 
-fn create_arena(at: usize) -> ArenaResult<&'static mut Arena> {
+fn create_arena(at: ArenaId) -> ArenaResult<&'static mut Arena> {
   let static_ = &*STATIC;
-  let mut arena = unsafe {
-    Arena::new(
-      at,
-      CHUNK_SIZE,
-    )?
-  };
-  static_.arenas()[at].store(arena.as_ptr(), Ordering::Release);
+  let mut arena = unsafe { Arena::new(at, CHUNK_SIZE)? };
+  static_.arenas()[at.0].store(arena.as_ptr(), Ordering::Release);
 
   Ok(unsafe { arena.as_mut() })
 }
@@ -99,7 +92,7 @@ fn acquire_arena() -> Option<&'static mut Arena> {
     return Some(arena);
   }
 
-  create_arena(idx).ok()
+  create_arena(ArenaId(idx)).ok()
 }
 
 pub fn acquire_this_arena() -> Option<NonNull<Arena>> {

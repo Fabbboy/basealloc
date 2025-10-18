@@ -39,6 +39,7 @@ use crate::{
     LookupError,
     OwnerInfo,
   },
+  static_::ARENA_MAP,
 };
 
 #[derive(Debug)]
@@ -122,7 +123,12 @@ impl Slab {
     arena_ref
       .etree()
       .register(extent_nn, info)
-      .map_err(SlabError::LookupError)
+      .map_err(SlabError::LookupError)?;
+
+    ARENA_MAP
+      .associate(extent_nn, arena_ref.index())
+      .map_err(SlabError::LookupError)?;
+    Ok(())
   }
 
   fn update_last(&mut self, found: usize) {
@@ -197,8 +203,8 @@ impl HasLink for Slab {
 
 impl Drop for Slab {
   fn drop(&mut self) {
-    // Note: Arena owns the etree, so we can't unregister here without arena access
-    // The arena will handle cleanup when it's dropped
+    let extent_nn = unsafe { NonNull::new_unchecked(&self.extent as *const _ as *mut _) };
+    let _ = ARENA_MAP.detach(extent_nn);
   }
 }
 
@@ -207,6 +213,7 @@ mod tests {
   use super::*;
   use crate::{
     CHUNK_SIZE,
+    arena::ArenaId,
     classes::{
       QUANTUM,
       SlabPages,
@@ -222,7 +229,7 @@ mod tests {
     let class_idx = class_for(QUANTUM).unwrap();
     let class = class_at(class_idx);
     let SlabPages(slab_size) = pages_for(class_idx);
-    let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+    let arena = unsafe { Arena::new(ArenaId(5), CHUNK_SIZE).expect("arena") };
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
@@ -240,7 +247,7 @@ mod tests {
     let class = class_at(class_idx);
 
     let SlabPages(slab_size) = pages_for(class_idx);
-    let arena = unsafe { Arena::new(5, CHUNK_SIZE).expect("arena") };
+    let arena = unsafe { Arena::new(ArenaId(5), CHUNK_SIZE).expect("arena") };
     let mut slab_ptr = Slab::new(&mut bump, class, slab_size, arena).expect("create slab");
     let slab = unsafe { slab_ptr.as_mut() };
 
