@@ -84,7 +84,8 @@ impl TCache {
 
   fn get_range(offset: usize, class_idx: SizeClassIndex) -> Range<usize> {
     let csize = cache_for(class_idx);
-    offset..offset + csize.0
+    let byte_size = csize.0 * core::mem::size_of::<*mut u8>();
+    offset..offset + byte_size
   }
 
   fn from_offset(exstart: *mut u8, offset: usize) -> *mut *mut u8 {
@@ -92,10 +93,12 @@ impl TCache {
   }
 
   fn construct_store(exstart: *mut u8, range: Range<usize>) -> UnsafeStore<*mut u8> {
+    let byte_size = range.end - range.start;
+    let ptr_count = byte_size / core::mem::size_of::<*mut u8>();
     UnsafeStore::from(unsafe {
       core::slice::from_raw_parts(
         Self::from_offset(exstart, range.start) as *const *mut u8,
-        range.end - range.start,
+        ptr_count,
       )
     })
   }
