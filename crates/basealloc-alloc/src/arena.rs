@@ -169,7 +169,6 @@ impl Arena {
     }
   }
 
-  /// Check if this arena owns the given pointer
   pub fn owns(&self, ptr: NonNull<u8>) -> bool {
     self.etree().lookup(ptr.as_ptr() as usize).is_some()
   }
