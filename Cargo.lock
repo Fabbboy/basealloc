@@ -111,6 +111,8 @@ dependencies = [
 name = "basealloc-sync"
 version = "0.1.0"
 dependencies = [
+ "basealloc-fixed",
+ "libc",
  "spin",
 ]
 

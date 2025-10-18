@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 spin = { workspace = true }
+libc = { workspace = true }
+
+basealloc-fixed = { workspace = true }

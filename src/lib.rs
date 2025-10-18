@@ -71,7 +71,6 @@ unsafe impl GlobalAlloc for BaseAlloc {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     let class = class_for(layout.size());
     if let Some(class) = class {
-      // Try tcache first for small allocations
       if let Some(mut tcache_ptr) = acquire_tcache() {
         let tcache = unsafe { tcache_ptr.as_mut() };
         let arena = unsafe { Self::acquire_arena().as_mut() };
@@ -79,8 +78,7 @@ unsafe impl GlobalAlloc for BaseAlloc {
           return ptr.as_ptr();
         }
       }
-
-      // Fallback to arena allocation
+ 
       let arena = unsafe { Self::acquire_arena().as_mut() };
       let ptr = arena.allocate(class);
       return match ptr {
@@ -107,16 +105,16 @@ unsafe impl GlobalAlloc for BaseAlloc {
         Entry::Class(class_entry) => {
           let ptr_nn = unsafe { NonNull::new_unchecked(ptr) };
 
-          // Try tcache first for small deallocations
           if let Some(mut tcache_ptr) = acquire_tcache() {
             let tcache = unsafe { tcache_ptr.as_mut() };
             let arena = unsafe { Self::acquire_arena().as_mut() };
-            if tcache.deallocate(arena, ptr_nn, class_entry.class().1).is_ok() {
+            if tcache
+              .deallocate(arena, ptr_nn, class_entry.class().1)
+              .is_ok()
+            {
               return;
             }
           }
-
-          // Fallback to arena deallocation
           let arena = unsafe { Self::acquire_arena().as_mut() };
           let _ = arena.deallocate_sc(ptr_nn, class_entry);
         }
