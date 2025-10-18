@@ -151,19 +151,8 @@ impl Arena {
 
     match info {
       OwnerInfo::Slab { slab, size_class } => {
-        let slab_ref = unsafe { slab.as_ref() };
-        let was_empty_before = slab_ref.is_empty();
-
         let bin = &mut self.bins[size_class.0];
-        bin.deallocate(ptr, slab).map_err(ArenaError::BinError)?;
-
-        if !was_empty_before && slab_ref.is_empty() {
-          let extent_nn =
-            unsafe { NonNull::new_unchecked(slab_ref.extent() as *const _ as *mut _) };
-          let _ = self.etree_mut().unregister(extent_nn);
-        }
-
-        Ok(())
+        bin.deallocate(ptr, slab).map_err(ArenaError::BinError)
       }
       OwnerInfo::Extent { extent } => self.deallocate_large(extent),
     }

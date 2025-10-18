@@ -63,6 +63,7 @@ pub struct Slab {
   link: Link<Self>,
   bitmap: Bitmap,
   last: usize,
+  arena: NonNull<Arena>,
 }
 
 impl Slab {
@@ -102,6 +103,7 @@ impl Slab {
       link: Link::default(),
       bitmap,
       last: 0,
+      arena,
     };
 
     unsafe {
@@ -205,6 +207,9 @@ impl Drop for Slab {
   fn drop(&mut self) {
     let extent_nn = unsafe { NonNull::new_unchecked(&self.extent as *const _ as *mut _) };
     let _ = ARENA_MAP.detach(extent_nn);
+
+    let arena_ref = unsafe { self.arena.as_ref() };
+    let _ = arena_ref.etree().unregister(extent_nn);
   }
 }
 
