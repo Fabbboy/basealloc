@@ -12,7 +12,9 @@ use basealloc_fixed::bump::{
   BumpError,
 };
 use getset::{
-  CloneGetters, Getters, MutGetters
+  CloneGetters,
+  Getters,
+  MutGetters,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +34,7 @@ use crate::{
     LookupError,
     OwnerInfo,
   },
+  static_::ARENA_MAP,
 };
 
 use basealloc_sys::{
@@ -119,6 +122,10 @@ impl Arena {
       .register(extent_nn, info)
       .map_err(ArenaError::LookupError)?;
 
+    ARENA_MAP
+      .associate(extent_nn, self.index())
+      .map_err(ArenaError::LookupError)?;
+
     Ok(unsafe { NonNull::new_unchecked(ptr) })
   }
 
@@ -127,6 +134,9 @@ impl Arena {
       .etree_mut()
       .unregister(extent)
       .map_err(ArenaError::LookupError)?;
+
+    ARENA_MAP.detach(extent).map_err(ArenaError::LookupError)?;
+
     let extent = unsafe { extent.as_mut() };
     let owning = unsafe { core::ptr::read(extent) };
     let _ = owning.giveup();

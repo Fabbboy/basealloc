@@ -10,7 +10,10 @@ use basealloc_rtree::{
 };
 use basealloc_sys::{
   prelude::page_align_down,
-  prim::PrimError,
+  prim::{
+    PrimError,
+    page_size,
+  },
 };
 
 use crate::{
@@ -102,16 +105,37 @@ impl ArenaMap {
     Ok(Some((start, last_page)))
   }
 
+  fn range_execute<F>(
+    &self,
+    start: usize,
+    stop: usize,
+    step: usize,
+    f: F,
+  ) -> Result<(), LookupError>
+  where
+    F: FnMut(usize) -> Result<(), LookupError>,
+  {
+    let mut current = start;
+    let mut func = f;
+    while current <= stop {
+      func(current)?;
+      current = current
+        .checked_add(step)
+        .ok_or(LookupError::RangeOverflow)?;
+    }
+    Ok(())
+  }
+
   pub fn associate(&self, extent: NonNull<Extent>, id: ArenaId) -> Result<(), LookupError> {
     let Some((start, last_page)) = self.page_range(extent)? else {
       return Ok(());
     };
 
-    let tree = unsafe { self.tree_mut() };
-    tree.insert(start, id)?;
-    if last_page != start {
-      tree.insert(last_page, id)?;
-    }
+    let page_sz = page_size();
+    self.range_execute(start, last_page, page_sz, |addr| {
+      let tree = unsafe { self.tree_mut() };
+      Ok(tree.insert(addr, id)?)
+    })?;
 
     Ok(())
   }
@@ -121,14 +145,15 @@ impl ArenaMap {
       return Ok(());
     };
 
-    let tree = unsafe { self.tree_mut() };
+    let page_sz = page_size();
     let mut removed_any = false;
-
-    removed_any |= tree.remove(start).is_some();
-
-    if last_page != start {
-      removed_any |= tree.remove(last_page).is_some();
-    }
+    self.range_execute(start, last_page, page_sz, |addr| {
+      let tree = unsafe { self.tree_mut() };
+      if tree.remove(addr).is_some() {
+        removed_any = true;
+      }
+      Ok(())
+    })?;
 
     if removed_any {
       Ok(())
@@ -183,16 +208,37 @@ impl ExtentTree {
     Ok(Some((start, last_page)))
   }
 
+  fn range_execute<F>(
+    &self,
+    start: usize,
+    stop: usize,
+    step: usize,
+    f: F,
+  ) -> Result<(), LookupError>
+  where
+    F: FnMut(usize) -> Result<(), LookupError>,
+  {
+    let mut current = start;
+    let mut func = f;
+    while current <= stop {
+      func(current)?;
+      current = current
+        .checked_add(step)
+        .ok_or(LookupError::RangeOverflow)?;
+    }
+    Ok(())
+  }
+
   pub fn register(&self, extent: NonNull<Extent>, info: OwnerInfo) -> Result<(), LookupError> {
     let Some((start, last_page)) = Self::page_range(extent)? else {
       return Ok(());
     };
 
-    let tree = unsafe { self.tree_mut() };
-    tree.insert(start, info)?;
-    if last_page != start {
-      tree.insert(last_page, info)?;
-    }
+    let page_sz = page_size();
+    self.range_execute(start, last_page, page_sz, |addr| {
+      let tree = unsafe { self.tree_mut() };
+      Ok(tree.insert(addr, info.clone())?)
+    })?;
 
     Ok(())
   }
@@ -202,14 +248,15 @@ impl ExtentTree {
       return Ok(());
     };
 
-    let tree = unsafe { self.tree_mut() };
+    let page_sz = page_size();
     let mut removed_any = false;
-
-    removed_any |= tree.remove(start).is_some();
-
-    if last_page != start {
-      removed_any |= tree.remove(last_page).is_some();
-    }
+    self.range_execute(start, last_page, page_sz, |addr| {
+      let tree = unsafe { self.tree_mut() };
+      if tree.remove(addr).is_some() {
+        removed_any = true;
+      }
+      Ok(())
+    })?;
 
     if removed_any {
       Ok(())
