@@ -21,3 +21,5 @@
 - [ ] Iterator for Radix-Tree
 - [ ] CRITICAL: Iterate tree in arena destructor to destruct slabs
 - [ ] Remove giveup trait
+- [ ] Large allocations can't be freed at arena drop
+- [ ] With iterator when arena is destroyed ensure to remove all nodes related to arena id

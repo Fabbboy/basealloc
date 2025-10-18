@@ -1,4 +1,5 @@
 use core::{
+  ops::Deref,
   ptr::NonNull,
   sync::atomic::{
     AtomicPtr,
@@ -29,14 +30,42 @@ use crate::{
   lookup::ArenaMap,
 };
 
+struct ThreadArena {
+  arena: AtomicPtr<Arena>,
+}
+
+impl Deref for ThreadArena {
+  type Target = AtomicPtr<Arena>;
+
+  fn deref(&self) -> &Self::Target {
+    &self.arena
+  }
+}
+
+impl Drop for ThreadArena {
+  fn drop(&mut self) {
+    let ptr = self.arena.load(Ordering::Acquire);
+    if ptr.is_null() {
+      return;
+    }
+
+    unsafe {
+      core::ptr::drop_in_place(ptr);
+    }
+
+    self.arena.store(core::ptr::null_mut(), Ordering::Release);
+  }
+}
+
 // Storage
 static BM_STORE: [BitmapWord; ARENA_BMS] = [const { BitmapWord::new(0) }; ARENA_BMS];
 static BM_LAST: AtomicUsize = AtomicUsize::new(0);
 static STATIC: LazyLock<Static> = LazyLock::new(|| Static::new(&BM_STORE));
 pub static ARENA_MAP: ArenaMap = ArenaMap::new(CHUNK_SIZE);
 
-static THREAD_ARENA: ThreadLocal<AtomicPtr<Arena>> =
-  ThreadLocal::new(|| AtomicPtr::new(acquire_arena().unwrap())); // TODO: add new container to impl drop
+static THREAD_ARENA: ThreadLocal<ThreadArena> = ThreadLocal::new(|| ThreadArena {
+  arena: AtomicPtr::new(acquire_arena().unwrap()),
+}); // TODO: add new container to impl drop
 
 #[derive(Getters)]
 struct Static {
