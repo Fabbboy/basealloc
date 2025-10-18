@@ -20,3 +20,4 @@
 - [x] TCache needs deallocate method
 - [ ] Iterator for Radix-Tree
 - [ ] CRITICAL: Iterate tree in arena destructor to destruct slabs
+- [ ] Remove giveup trait

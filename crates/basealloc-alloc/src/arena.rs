@@ -129,17 +129,16 @@ impl Arena {
     Ok(unsafe { NonNull::new_unchecked(ptr) })
   }
 
-  pub fn deallocate_large(&mut self, mut extent: NonNull<Extent>) -> ArenaResult<()> {
+  pub fn deallocate_large(&mut self, extent: NonNull<Extent>) -> ArenaResult<()> {
     self
       .etree_mut()
       .unregister(extent)
       .map_err(ArenaError::LookupError)?;
-
     ARENA_MAP.detach(extent).map_err(ArenaError::LookupError)?;
 
-    let extent = unsafe { extent.as_mut() };
-    let owning = unsafe { core::ptr::read(extent) };
-    let _ = owning.giveup();
+    unsafe {
+      core::ptr::drop_in_place(extent.as_ptr());
+    }
     Ok(())
   }
 
