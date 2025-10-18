@@ -10,7 +10,6 @@ basealloc-fixed = { workspace = true }
 basealloc-rtree = { workspace = true }
 basealloc-bitmap = { workspace = true }
 basealloc-sync = { workspace = true }
-basealloc-rbtree = { workspace = true }
 basealloc-extent = { workspace = true }
 basealloc-ring = { workspace = true }
 

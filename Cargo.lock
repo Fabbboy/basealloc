@@ -50,7 +50,6 @@ dependencies = [
  "basealloc-extent",
  "basealloc-fixed",
  "basealloc-list",
- "basealloc-rbtree",
  "basealloc-ring",
  "basealloc-rtree",
  "basealloc-sync",
@@ -84,15 +83,6 @@ name = "basealloc-list"
 version = "0.1.0"
 dependencies = [
  "getset",
-]
-
-[[package]]
-name = "basealloc-rbtree"
-version = "0.1.0"
-dependencies = [
- "basealloc-fixed",
- "getset",
- "spin",
 ]
 
 [[package]]
