@@ -13,8 +13,8 @@ use crate::{
   WORD_TRAILING,
 };
 
-pub const QUANTUM: usize = WORD * 2;
-pub const NGROUPSEX: usize = 2;
+pub const QUANTUM: usize = WORD;
+pub const NGROUPSEX: usize = 4;
 pub const NGROUPS: usize = 1 << NGROUPSEX;
 
 pub const NTINY: usize = NGROUPS * QUANTUM;
